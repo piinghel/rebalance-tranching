@@ -63,7 +63,7 @@ def render(
     ):
         fig, ax = plt.subplots(figsize=(5.2, 5.6) if mobile else (9.0, 4.8))
         fig.patch.set_alpha(0)
-        sample = rows
+        sample = [row for row in rows if row["period"] == "later"]
         observations = [date.fromisoformat(row["date"]) for row in sample]
         dates = np.array(
             [observations[0] - timedelta(days=1), *observations], dtype="datetime64[D]"
@@ -106,7 +106,7 @@ def render(
                 annotation_clip=False,
             )
         ax.set_yscale("log")
-        ax.yaxis.set_major_locator(FixedLocator([1, 2, 5, 10, 20]))
+        ax.yaxis.set_major_locator(FixedLocator([1, 1.2, 1.4, 1.6]))
         ax.yaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
         ax.yaxis.set_minor_formatter(NullFormatter())
         ax.set_title(
@@ -125,7 +125,7 @@ def render(
             fontsize=12,
             va="top",
         )
-        years = [2010, 2026] if mobile else [2005, 2010, 2015, 2020, 2026]
+        years = [2024, 2026] if mobile else [2023, 2024, 2025, 2026]
         ax.xaxis.set_major_locator(
             FixedLocator(
                 mdates.date2num(
