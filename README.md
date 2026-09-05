@@ -32,7 +32,9 @@ It writes no files. `--input path/to/timing_daily.parquet` selects another daily
 The second command rebuilds the article's performance chart in light/dark and
 desktop/phone layouts. The third retains the supporting combination-dispersion
 figure. Both write SVGs to `output/` by default; use `--output` for another directory.
-Generated SVGs are ignored by Git.
+The performance and calendar-grid renderers also export 300 dpi PNGs. Published
+figures use the SVGs for sharp text and lines at every screen size. Generated
+outputs are ignored by Git.
 
 The complete starting-week × signal-weekday comparison uses the same saved
 forecasts and allocation rules for all 15 calendars:
@@ -45,7 +47,9 @@ uv run python -m rebalance_tranching.grid_figures --input output/calendar --outp
 This writes daily gross/net returns for the 15 standalone calendars and five
 three-tranche portfolios, period and annual metrics, calendar ranges and
 population standard deviations, a descriptive offset/weekday/interaction
-decomposition, and trading activity. The figures use the later-period metrics.
+decomposition, and trading activity. The main figures use the full matched period,
+22 September 1998–27 May 2026. Development and later results remain separate in
+the period outputs so the long development history does not hide recent differences.
 The decomposition describes this anchored grid; it is not an independent-sample
 significance test. Annual comparisons include complete years 1999–2025.
 
@@ -53,7 +57,7 @@ significance test. Annual comparisons include complete years 1999–2025.
 | --- | --- |
 | [analysis.py](rebalance_tranching/analysis.py) | Matched-calendar validation, fixed-notional mixtures and metrics |
 | [example.py](rebalance_tranching/example.py) | Six-week schedule and hand-checkable daily mixture |
-| [performance.py](rebalance_tranching/performance.py) | Later-period portfolio paths |
+| [performance.py](rebalance_tranching/performance.py) | Full-period fixed best/worst Friday paths and the three-tranche portfolio |
 | [dispersion.py](rebalance_tranching/dispersion.py) | Return and volatility across all schedule combinations |
 | [calendar_grid.py](rebalance_tranching/calendar_grid.py) | Fifteen calendars, five combined portfolios and matched comparisons |
 | [grid_figures.py](rebalance_tranching/grid_figures.py) | Calendar heatmap and aligned return/volatility panels |

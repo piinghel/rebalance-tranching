@@ -1,4 +1,4 @@
-"""Render the rebalance schedules and their mixture from aggregate daily returns."""
+"""Show fixed best/worst Friday calendars and their three-tranche portfolio."""
 
 from __future__ import annotations
 
@@ -52,81 +52,80 @@ def render(
     rows: list[dict[str, str]], output: Path, *, dark: bool, mobile: bool = False
 ) -> None:
     ink, grid = ("#c9d1d9", "#30363d") if dark else ("#33404b", "#dbe1e3")
-    colors = (
-        ["#a7b4c1", "#c3aa91", "#a1b3a6", "#79b9f0"]
-        if dark
-        else ["#718293", "#9a7e65", "#718876", "#174b78"]
-    )
+    muted, accent = ("#a7b4c1", "#79b9f0") if dark else ("#8796a4", "#174b78")
     with plt.rc_context(
         {
             "font.family": ["DejaVu Sans", "sans-serif"],
-            "font.size": 12.5 if mobile else 11,
+            "font.size": 12,
             "svg.fonttype": "none",
             "svg.hashsalt": "timing-performance",
         }
     ):
         fig, ax = plt.subplots(figsize=(5.2, 5.6) if mobile else (9.0, 4.8))
         fig.patch.set_alpha(0)
-        cagrs = []
-        sample = [row for row in rows if row["period"] == "later"]
+        sample = rows
         observations = [date.fromisoformat(row["date"]) for row in sample]
         dates = np.array(
             [observations[0] - timedelta(days=1), *observations], dtype="datetime64[D]"
         )
-        for index, key in enumerate(("week_1", "week_2", "week_3", "mixture")):
+        paths, cagrs = [], []
+        for key in ("week_1", "week_2", "week_3", "mixture"):
             returns = np.array([float(row[key]) for row in sample])
             growth = np.r_[1.0, np.cumprod(1 + returns)]
-            ax.plot(
-                dates, growth, color=colors[index], linewidth=2.1 if index == 3 else 1.1
-            )
-            cagr = (growth[-1] ** (252 / len(returns)) - 1) * 100
-            cagrs.append(cagr)
+            paths.append(growth)
+            cagrs.append((growth[-1] ** (252 / len(returns)) - 1) * 100)
+        # Select once over the entire period; never switch calendars along a path.
+        best, worst = int(np.argmax(cagrs[:3])), int(np.argmin(cagrs[:3]))
+        ax.fill_between(dates, paths[worst], paths[best], color=muted, alpha=0.20)
+        for index in (best, worst, 3):
+            color = accent if index == 3 else muted
+            growth = paths[index]
+            ax.plot(dates, growth, color=color, linewidth=2.1 if index == 3 else 0.9)
             label = (
-                f"Week {index + 1} offset" if index < 3 else "Three-tranche\nportfolio"
-            )
-            label_y = growth[-1] * (
-                1.04
-                if index == 1
-                else 1.018
-                if index == 0
-                else 0.957
+                "Three-tranche\nportfolio"
                 if index == 3
-                else 1
+                else f"{'Best' if index == best else 'Worst'}: Week {index + 1}"
             )
+            label_y = 0.96 if index == best else 0.60 if index == worst else 0.78
             ax.annotate(
-                f"{label}\n{cagr:.2f}%",
+                f"{label}\n{cagrs[index]:.2f}%",
                 xy=(dates[-1], growth[-1]),
                 xycoords="data",
                 xytext=(1.035, label_y),
-                textcoords=ax.get_yaxis_transform(),
+                textcoords=ax.transAxes,
                 va="center",
-                fontsize=12.5 if mobile else 11,
-                color=colors[index],
-                fontweight="bold" if index == 3 else "normal",
-                arrowprops={"arrowstyle": "-", "color": colors[index], "lw": 0.7},
+                fontsize=12,
+                color=color,
+                fontweight="medium" if index == 3 else "normal",
+                arrowprops={
+                    "arrowstyle": "-",
+                    "color": color,
+                    "lw": 0.7,
+                    "connectionstyle": "angle,angleA=0,angleB=90,rad=2",
+                },
                 annotation_clip=False,
             )
         ax.set_yscale("log")
-        ax.yaxis.set_major_locator(FixedLocator([1, 1.2, 1.4, 1.6]))
+        ax.yaxis.set_major_locator(FixedLocator([1, 2, 5, 10, 20]))
         ax.yaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
         ax.yaxis.set_minor_formatter(NullFormatter())
         ax.set_title(
             "Net growth index · log scale",
             loc="left",
             color=ink,
-            fontsize=12.5 if mobile else 11,
+            fontsize=12,
             pad=14,
         )
         ax.text(
             0.02,
             0.94,
-            f"Annualized return spread: {max(cagrs[:3]) - min(cagrs[:3]):.2f} pp",
+            f"Return spread: {max(cagrs[:3]) - min(cagrs[:3]):.2f} pp",
             transform=ax.transAxes,
             color=ink,
-            fontsize=11.5 if mobile else 10,
+            fontsize=12,
             va="top",
         )
-        years = range(2024 if mobile else 2023, 2027, 2 if mobile else 1)
+        years = [2010, 2026] if mobile else [2005, 2010, 2015, 2020, 2026]
         ax.xaxis.set_major_locator(
             FixedLocator(
                 mdates.date2num(
@@ -151,6 +150,11 @@ def render(
         fig.savefig(output, transparent=True, metadata={"Date": None})
         output.write_text(
             "\n".join(line.rstrip() for line in output.read_text().splitlines()) + "\n"
+        )
+        fig.savefig(
+            output.with_suffix(".png"),
+            dpi=300,
+            facecolor="#0d1117" if dark else "#ffffff",
         )
         plt.close(fig)
 

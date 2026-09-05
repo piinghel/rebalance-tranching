@@ -149,6 +149,7 @@ def main() -> None:
     combined = combine_grid(frame)
     combined.write_parquet(args.output / "calendar_portfolios.parquet")
     for period, expression in (
+        ("full", pl.lit(True)),
         ("development", pl.col("date") < pl.date(2022, 1, 1)),
         ("later", pl.col("date") >= pl.date(2022, 1, 1)),
     ):
