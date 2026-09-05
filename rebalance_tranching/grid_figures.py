@@ -15,7 +15,11 @@ from matplotlib.colors import LinearSegmentedColormap
 
 
 def save(fig: plt.Figure, path: Path) -> None:
-    fig.savefig(path.with_suffix(".svg"), transparent=True, metadata={"Date": None})
+    svg = path.with_suffix(".svg")
+    fig.savefig(svg, transparent=True, metadata={"Date": None})
+    svg.write_text(
+        "\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n"
+    )
     fig.savefig(path.with_suffix(".png"), dpi=150)
     plt.close(fig)
 
@@ -115,7 +119,7 @@ def render(metrics: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> 
         fig, axes = plt.subplots(
             2 if mobile else 1,
             1 if mobile else 2,
-            figsize=(4.6, 7.3) if mobile else (9, 4.3),
+            figsize=(4.6, 7.7) if mobile else (9, 4.6),
         )
         for ax, metric, title in zip(
             axes,
@@ -159,7 +163,21 @@ def render(metrics: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> 
                     label="Three-tranche portfolio" if d == 1 else None,
                     zorder=5,
                 )
-            ax.set_title(title, loc="left", color=ink, fontsize=12, pad=15)
+            means = (
+                metrics.lazy().group_by("sleeves").agg(pl.col(metric).mean()).collect()
+            )
+            before = means.filter(pl.col("sleeves") == 1)[metric].item()
+            after = means.filter(pl.col("sleeves") == 3)[metric].item()
+            ax.set_title(title, loc="left", color=ink, fontsize=12, pad=32)
+            ax.text(
+                0,
+                1.025,
+                f"Mean: {before:.2f}% → {after:.2f}%",
+                transform=ax.transAxes,
+                color=ink,
+                fontsize=11,
+                va="bottom",
+            )
             ax.set_yticks(range(1, 6), weekdays)
             ax.set_ylim(5.55, 0.45)
             ax.grid(axis="x", color=grid, linewidth=0.6)
@@ -184,7 +202,7 @@ def render(metrics: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> 
         fig.subplots_adjust(
             left=0.26 if mobile else 0.15,
             right=0.98,
-            top=0.92 if mobile else 0.88,
+            top=0.90 if mobile else 0.82,
             bottom=0.16 if mobile else 0.20,
             hspace=0.43,
             wspace=0.14,
