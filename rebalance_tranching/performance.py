@@ -53,21 +53,21 @@ def render(
 ) -> None:
     ink, grid = ("#c9d1d9", "#30363d") if dark else ("#33404b", "#dbe1e3")
     colors = (
-        ["#8097ad", "#c79261", "#89a88c", "#e7edf1"]
+        ["#a7b4c1", "#c3aa91", "#a1b3a6", "#79b9f0"]
         if dark
-        else ["#708da7", "#b98556", "#86a488", "#263e54"]
+        else ["#718293", "#9a7e65", "#718876", "#174b78"]
     )
     with plt.rc_context(
         {
             "font.family": ["DejaVu Sans", "sans-serif"],
-            "font.size": 11,
+            "font.size": 12.5 if mobile else 11,
             "svg.fonttype": "none",
             "svg.hashsalt": "timing-performance",
         }
     ):
-        fig, ax = plt.subplots(figsize=(4.8, 4.8) if mobile else (8.5, 4.8))
+        fig, ax = plt.subplots(figsize=(5.2, 5.6) if mobile else (9.0, 4.8))
         fig.patch.set_alpha(0)
-        handles = []
+        cagrs = []
         sample = [row for row in rows if row["period"] == "later"]
         observations = [date.fromisoformat(row["date"]) for row in sample]
         dates = np.array(
@@ -76,16 +76,64 @@ def render(
         for index, key in enumerate(("week_1", "week_2", "week_3", "mixture")):
             returns = np.array([float(row[key]) for row in sample])
             growth = np.r_[1.0, np.cumprod(1 + returns)]
-            (line,) = ax.plot(
+            ax.plot(
                 dates, growth, color=colors[index], linewidth=2.1 if index == 3 else 1.1
             )
-            handles.append(line)
+            cagr = (growth[-1] ** (252 / len(returns)) - 1) * 100
+            cagrs.append(cagr)
+            label = (
+                f"Week {index + 1} offset" if index < 3 else "Three-tranche\nportfolio"
+            )
+            label_y = growth[-1] * (
+                1.04
+                if index == 1
+                else 1.018
+                if index == 0
+                else 0.957
+                if index == 3
+                else 1
+            )
+            ax.annotate(
+                f"{label}\n{cagr:.2f}%",
+                xy=(dates[-1], growth[-1]),
+                xycoords="data",
+                xytext=(1.035, label_y),
+                textcoords=ax.get_yaxis_transform(),
+                va="center",
+                fontsize=12.5 if mobile else 11,
+                color=colors[index],
+                fontweight="bold" if index == 3 else "normal",
+                arrowprops={"arrowstyle": "-", "color": colors[index], "lw": 0.7},
+                annotation_clip=False,
+            )
         ax.set_yscale("log")
         ax.yaxis.set_major_locator(FixedLocator([1, 1.2, 1.4, 1.6]))
         ax.yaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
         ax.yaxis.set_minor_formatter(NullFormatter())
-        ax.set_ylabel("Net growth index (log scale)", color=ink)
-        ax.xaxis.set_major_locator(mdates.YearLocator(1))
+        ax.set_title(
+            "Net growth index · log scale",
+            loc="left",
+            color=ink,
+            fontsize=12.5 if mobile else 11,
+            pad=14,
+        )
+        ax.text(
+            0.02,
+            0.94,
+            f"Annualized return spread: {max(cagrs[:3]) - min(cagrs[:3]):.2f} pp",
+            transform=ax.transAxes,
+            color=ink,
+            fontsize=11.5 if mobile else 10,
+            va="top",
+        )
+        years = range(2024 if mobile else 2023, 2027, 2 if mobile else 1)
+        ax.xaxis.set_major_locator(
+            FixedLocator(
+                mdates.date2num(
+                    [observations[0], *[date(year, 1, 1) for year in years]]
+                )
+            )
+        )
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
         ax.grid(axis="y", which="major", color=grid, linewidth=0.6)
         ax.set_axisbelow(True)
@@ -94,20 +142,11 @@ def render(
         ax.margins(x=0, y=0.06)
         for spine in ax.spines.values():
             spine.set_visible(False)
-        fig.legend(
-            handles,
-            ["Sleeve A", "Sleeve B", "Sleeve C", "Three-sleeve mixture"],
-            loc="lower center",
-            ncol=2 if mobile else 4,
-            frameon=False,
-            labelcolor=ink,
-            bbox_to_anchor=(0.53, 0.005),
-        )
         fig.subplots_adjust(
-            left=0.16 if mobile else 0.10,
-            right=0.975,
-            top=0.96,
-            bottom=0.23 if mobile else 0.19,
+            left=0.09 if mobile else 0.065,
+            right=0.69 if mobile else 0.79,
+            top=0.90,
+            bottom=0.10,
         )
         fig.savefig(output, transparent=True, metadata={"Date": None})
         output.write_text(

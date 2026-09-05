@@ -20,10 +20,23 @@
       }
     }
   ],
-  "scope": "Unchanged portfolio-level inputs; calculations and figure sources now maintained here.",
+  "scope": "Original portfolio-level inputs retained unchanged; matched 15-calendar replay added on 2026-09-06. Calculations and figures maintained here.",
+  "calendar_grid": {
+    "generated_on": "2026-09-06",
+    "prediction_sha256": "1b35ad6bb9ff27e0fc2d94a69ad33d2a70d3b186a58546684f591aab27ecaf45",
+    "anchor_week": "1998-08-31",
+    "start": "1998-09-22",
+    "end": "2026-05-27",
+    "trading_cost_bp": 5,
+    "execution_lag_sessions": 1,
+    "reference_capital": 5000000,
+    "scope": "Portfolio-only exports. Each weekday combines three equal fixed-notional replicas. Security-level executions and forecasts are not included."
+  },
   "sha256": {
     "data/timing_daily.parquet": "4ffc433d583c9045642cf3bafdc8278c81af6dc6d72f3b9f5789ad3a863b1f28",
     "data/timing_metrics.csv": "e69c30c9d422b95cc45e255c44f38a3ab0e6d038e28fb3b3b279278cfc556349",
-    "data/schedule_returns.csv": "470236e462819d55a6cffd16b4b478104c3e004f9d03ba9e24af8f90a8c9ddc2"
+    "data/schedule_returns.csv": "470236e462819d55a6cffd16b4b478104c3e004f9d03ba9e24af8f90a8c9ddc2",
+    "data/calendar_daily.parquet": "4912ca9104ae8de4cf23cbbdceea7f4d68000c3f482715bbc5f2d8b1b3b2bac5",
+    "data/calendar_events.csv": "c9f40290334d7264c2509add2c8be2eb90c0f963ffdc81deede72d49265b688f"
   }
 }

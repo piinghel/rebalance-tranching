@@ -75,6 +75,6 @@ def test_performance_exports_matching_theme_layouts(tmp_path, mobile):
         svg = ElementTree.parse(output).getroot()
         bounds.append(svg.attrib["viewBox"])
         text = " ".join(svg.itertext())
-        assert "Three-sleeve mixture" in text
-        assert "Net growth index (log scale)" in text
+        assert "Three-tranche" in text and "portfolio" in text
+        assert "Net growth index · log scale" in text
     assert bounds[0] == bounds[1]
