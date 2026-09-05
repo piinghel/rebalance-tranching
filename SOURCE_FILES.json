@@ -1,0 +1,29 @@
+{
+  "sources": [
+    {
+      "repository": "https://github.com/piinghel/systematic-equity-research",
+      "commit": "4d457c9b2c15a9a7cfd83c8cc1f7ff20f847f063",
+      "source_to_included": {
+        "outputs/review/timing/timing_daily.parquet": "data/timing_daily.parquet",
+        "outputs/review/timing/timing_metrics.csv": "data/timing_metrics.csv"
+      }
+    },
+    {
+      "repository": "https://github.com/piinghel/piinghel.github.io",
+      "commit": "43da247",
+      "source_to_included": {
+        "assets/tranching/schedule_returns.csv": "data/schedule_returns.csv"
+      },
+      "figure_sources": {
+        "scripts/render_timing_performance.py": "rebalance_tranching/performance.py",
+        "scripts/render_timing_figure.py": "rebalance_tranching/dispersion.py"
+      }
+    }
+  ],
+  "scope": "Unchanged portfolio-level inputs; calculations and figure sources now maintained here.",
+  "sha256": {
+    "data/timing_daily.parquet": "4ffc433d583c9045642cf3bafdc8278c81af6dc6d72f3b9f5789ad3a863b1f28",
+    "data/timing_metrics.csv": "e69c30c9d422b95cc45e255c44f38a3ab0e6d038e28fb3b3b279278cfc556349",
+    "data/schedule_returns.csv": "470236e462819d55a6cffd16b4b478104c3e004f9d03ba9e24af8f90a8c9ddc2"
+  }
+}
