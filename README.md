@@ -44,6 +44,16 @@ uv run python -m rebalance_tranching.calendar_grid --input data/calendar_daily.p
 uv run python -m rebalance_tranching.grid_figures --input output/calendar --output output
 ```
 
+Test whether the spread between the 15 schedules exceeds luck: a moving-block
+bootstrap (63-session blocks) of the demeaned daily returns gives the spread
+expected when no schedule is better. The same run reports spreads in windows as
+long as the later period, yearly spreads, fixed-starting-week spreads and a
+mixture of all 15 schedules.
+
+```bash
+uv run python -m rebalance_tranching.schedule_luck --input data/calendar_daily.parquet --output output/schedule-luck-2026-09-27
+```
+
 This writes daily gross/net returns for the 15 standalone calendars and five
 three-tranche portfolios, period and annual metrics, calendar ranges and
 population standard deviations, a descriptive offset/weekday/interaction
