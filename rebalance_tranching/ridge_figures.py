@@ -14,7 +14,7 @@ import numpy as np
 import polars as pl
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import FixedLocator, MaxNLocator, NullLocator, ScalarFormatter
 
 from rebalance_tranching.calendar_grid import combine_grid, grid_metrics
 
@@ -71,6 +71,7 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
     fig, ax = plt.subplots(figsize=(5.2, 4.2) if mobile else (9, 4.5))
     fig.patch.set_facecolor(colors["background"])
     axes_style(ax, colors, mobile=mobile)
+    ax.set_yscale("log")
     lines = []
     for key, label, color, dash in [
         ("1", "Week 1", "single", "-"),
@@ -93,15 +94,16 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
         lines.append((float(growth[-1]), label, colors[color]))
     # Endpoint labels live beyond the data and retain their vertical order.
     lines.sort()
-    gap = (ax.get_ylim()[1] - ax.get_ylim()[0]) * (0.11 if mobile else 0.065)
+    low, high = np.log(ax.get_ylim())
+    gap = (high - low) * (0.11 if mobile else 0.065)
     positions = []
     for value, label, color in lines:
-        y = max(value, positions[-1] + gap) if positions else value
+        y = max(np.log(value), positions[-1] + gap) if positions else np.log(value)
         positions.append(y)
         ax.annotate(
             label,
             xy=(dates[-1], value),
-            xytext=(1.04, y),
+            xytext=(1.04, np.exp(y)),
             textcoords=ax.get_yaxis_transform(),
             arrowprops={"arrowstyle": "-", "color": color, "lw": 0.7},
             color=color,
@@ -109,6 +111,13 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
             va="center",
             annotation_clip=False,
         )
+    ax.yaxis.set_major_locator(
+        FixedLocator(
+            MaxNLocator(nbins=5, steps=[1, 2, 5, 10]).tick_values(*ax.get_ylim())
+        )
+    )
+    ax.yaxis.set_major_formatter(ScalarFormatter())
+    ax.yaxis.set_minor_locator(NullLocator())
     ax.grid(axis="y", color=colors["grid"], lw=0.6)
     ax.axhline(100, color=colors["grid"], lw=0.8)
     ax.set_xlim(dates[0], dates[-1])
@@ -117,7 +126,7 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
     ax.text(
         0,
         1.05,
-        "Net growth index · 100 at start",
+        "Net growth · log scale",
         transform=ax.transAxes,
         color=colors["ink"],
         fontsize=13 if mobile else 12,
@@ -133,12 +142,12 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
 
 
 def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> None:
-    """Show every calendar on a common return scale, with combined books beside it."""
+    """Compare the dispersion of standalone calendars with weekly thirds."""
     colors = theme(dark)
     fig, axs = plt.subplots(
         2 if mobile else 1,
         1 if mobile else 2,
-        figsize=(5.2, 8.0) if mobile else (10, 4.9),
+        figsize=(5.2, 6.4) if mobile else (10, 3.5),
         squeeze=False,
     )
     fig.patch.set_facecolor(colors["background"])
@@ -151,49 +160,50 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
     ]
     low = min(f["net_cagr"].to_numpy().min() for f in frames)
     high = max(f["net_cagr"].to_numpy().max() for f in frames)
-    pad = (high - low) * 0.13
+    pad = (high - low) * 0.08
     for ax, frame, title in zip(
         axs.flat, frames, ["1998–2021", "2022–May 2026"], strict=True
     ):
         axes_style(ax, colors, mobile=mobile)
-        for day in range(1, 6):
-            part = frame.lazy().filter(pl.col("weekday") == day).collect()
-            singles = (
-                part.lazy().filter(pl.col("sleeves") == 1).sort("schedules").collect()
+        for count, y, label, color in [
+            (1, 1, "One schedule", colors["single"]),
+            (3, 0, "⅓ each week", colors["combined"]),
+        ]:
+            values = (
+                frame.lazy()
+                .filter(pl.col("sleeves") == count)
+                .sort("net_cagr")
+                .select("net_cagr")
+                .collect()["net_cagr"]
+                .to_numpy()
             )
-            ax.plot(
-                [singles["net_cagr"].min(), singles["net_cagr"].max()],
-                [day, day],
-                color=colors["range"],
-                alpha=0.45,
-                lw=1,
+            ax.plot([values.min(), values.max()], [y, y], color=color, lw=3, alpha=0.45)
+            # Small vertical offsets reveal overlapping calendars; only x encodes return.
+            offsets = (np.arange(len(values)) % 3 - 1) * 0.07
+            ax.scatter(values, y + offsets, s=34, color=color, zorder=3)
+            transform = ax.get_yaxis_transform()
+            ax.text(
+                0,
+                y + 0.3,
+                label,
+                transform=transform,
+                color=colors["ink"],
+                fontsize=13 if mobile else 11,
+                fontweight="semibold",
             )
-            for row, marker, shift in zip(
-                singles.iter_rows(named=True),
-                ["o", "s", "^"],
-                [-0.11, 0, 0.11],
-                strict=True,
-            ):
-                ax.scatter(
-                    row["net_cagr"],
-                    day + shift,
-                    s=25,
-                    marker=marker,
-                    color=colors["single"],
-                    zorder=3,
-                )
-            blend = (
-                part.lazy().filter(pl.col("sleeves") == 3).collect()["net_cagr"].item()
+            ax.text(
+                1,
+                y + 0.3,
+                f"{np.ptp(values):.2f} pp spread",
+                transform=transform,
+                color=color,
+                ha="right",
+                fontsize=12 if mobile else 11,
             )
-            ax.scatter(
-                blend, day + 0.27, s=44, marker="D", color=colors["combined"], zorder=4
-            )
-        ax.set_yticks(
-            range(1, 6), ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        )
-        ax.set_ylim(5.7, 0.5)
+        ax.set_yticks([])
+        ax.set_ylim(-0.4, 1.65)
         ax.set_xlim(low - pad, high + pad)
-        ax.xaxis.set_major_locator(MaxNLocator(5))
+        ax.xaxis.set_major_locator(MaxNLocator(4, steps=[1, 2, 5, 10]))
         ax.grid(axis="x", color=colors["grid"], lw=0.6)
         ax.set_xlabel(
             "Annualized net return (%)",
@@ -209,44 +219,13 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
             fontweight="semibold",
             pad=15,
         )
-    handles = [
-        plt.Line2D(
-            [],
-            [],
-            color=colors["single"],
-            marker=m,
-            ls="",
-            label=f"Week {i + 1}",
-            markersize=5,
-        )
-        for i, m in enumerate(["o", "s", "^"])
-    ]
-    handles.append(
-        plt.Line2D(
-            [],
-            [],
-            color=colors["combined"],
-            marker="D",
-            ls="",
-            label="Three tranches",
-            markersize=6,
-        )
-    )
-    fig.legend(
-        handles=handles,
-        loc="upper center",
-        ncol=2 if mobile else 4,
-        frameon=False,
-        labelcolor=colors["ink"],
-        fontsize=12.5 if mobile else 10.5,
-    )
     fig.subplots_adjust(
-        left=0.24 if mobile else 0.11,
+        left=0.08,
         right=0.97,
-        top=0.85 if mobile else 0.79,
-        bottom=0.08 if mobile else 0.16,
-        wspace=0.42,
-        hspace=0.45,
+        top=0.90 if mobile else 0.83,
+        bottom=0.10 if mobile else 0.20,
+        wspace=0.25,
+        hspace=0.65,
     )
     save_svg(fig, output)
 
@@ -288,11 +267,12 @@ def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
         {
             "schedules": dict(
                 kind="performance",
+                log=True,
                 series=["1", "2", "3", "1+2+3"],
                 initialRange=["2021-12-31", "2026-05-27"],
                 directLabels=True,
                 showLegend=False,
-                unit="Net growth index · 100 at selected start",
+                unit="Net growth · log scale",
                 episodes=[
                     ["Development", str(part["date"][0]), "2021-12-31"],
                     ["Later", "2021-12-31", "2026-05-27"],

@@ -41,7 +41,11 @@ def test_current_figures_export_vector_matching_theme_layouts(tmp_path, mobile, 
         svg = ElementTree.parse(output).getroot()
         bounds.append(svg.attrib["viewBox"])
         text = " ".join(svg.itertext())
-        assert "Week 1" in text and "Week 2" in text and "Week 3" in text
-        assert "Three" in text and "tranches" in text
+        if render is ridge_figures.performance:
+            assert "Week 1" in text and "Week 2" in text and "Week 3" in text
+            assert "Three" in text and "tranches" in text
+        else:
+            assert "One schedule" in text and "⅓ each week" in text
+            assert "2.65 pp spread" in text and "0.95 pp spread" in text
         assert not list(svg.iter("{http://www.w3.org/2000/svg}image"))
     assert bounds[0] == bounds[1]

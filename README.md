@@ -61,12 +61,16 @@ python scripts/replay_calendar.py \
   --panel /path/to/normalized/panel.parquet \
   --predictions /path/to/ridge_80_c0p1/backtest/predictions.parquet \
   --registry /path/to/research-registry --database /path/to/registry.sqlite \
-  --weekday 5 --offset 0 --calibration 1.18 --output /path/to/runs/w5_o0
+  --weekday 5 --offset 0 --calibration 1.18 --volatility-target 0.07 \
+  --output /path/to/runs/w5_o0
 ```
 
 Use a new destination and increment `--attempt` for an actual retry. The
 configuration is inherited from `allocation_b3_state_aware_mvo.yaml` and its
-parent; the calibration multiplier is explicit. Each standalone calendar is
+parent; the calibration multiplier and forecast volatility target are explicit.
+For a separately registered specification, supply its `--experiment-id` and
+unique `--run-prefix`; the defaults identify the published Ridge-80 study.
+Each standalone calendar is
 executed at $5 million reference capital. Mixtures scale these executed books
 to thirds: they preserve daily return and proportional-cost arithmetic without
 re-solving or re-rounding smaller orders. The collector checks all 15 completed

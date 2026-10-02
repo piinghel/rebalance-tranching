@@ -12,7 +12,7 @@ import polars as pl
 from rebalance_tranching.calendar_grid import combine_grid
 
 
-def optimizer_audit(folder: Path) -> dict[str, object]:
+def optimizer_audit(folder: Path, volatility_target: float = 0.07) -> dict[str, object]:
     """Check the native solver outcome and B3 portfolio risk limits."""
     diagnostics = pl.scan_parquet(folder / "optimizer_diagnostics.parquet")
     check = (
@@ -51,7 +51,7 @@ def optimizer_audit(folder: Path) -> dict[str, object]:
         or check["gross"] > 2.000001
         or check["net_exposure"] > 0.250001
         or check["beta_exposure"] > 0.050001
-        or check["ex_ante_vol_annual"] > 0.070001
+        or check["ex_ante_vol_annual"] > volatility_target + 1e-6
     ):
         raise ValueError(f"Optimizer audit failed: {folder}: {check}")
     return check
@@ -95,6 +95,7 @@ def validate_costs(daily: pl.DataFrame) -> float:
 
 def collect(root: Path, output: Path) -> None:
     frames, events, hashes, allocations, sources, solver_checks = [], [], {}, [], [], {}
+    targets = []
     zero_quantity_rows = {}
     for weekday in range(1, 6):
         for offset in range(3):
@@ -103,8 +104,10 @@ def collect(root: Path, output: Path) -> None:
             if record["status"] != "completed":
                 raise ValueError(f"Incomplete execution: {folder}")
             allocations.append(record["provenance"]["calibration"])
+            target = float(record["provenance"].get("volatility_target", "0.07"))
+            targets.append(target)
             sources.append(record["provenance"]["inputs"])
-            solver_checks[folder.name] = optimizer_audit(folder)
+            solver_checks[folder.name] = optimizer_audit(folder, target)
             path = folder / "daily.parquet"
             hashes[folder.name] = hashlib.sha256(path.read_bytes()).hexdigest()
             trades = pl.scan_parquet(folder / "trades.parquet")
@@ -130,6 +133,8 @@ def collect(root: Path, output: Path) -> None:
             )
     if len(set(allocations)) != 1:
         raise ValueError("Calendars used different risk calibrations")
+    if len(set(targets)) != 1:
+        raise ValueError("Calendars used different volatility targets")
     if len(set(sources)) != 1:
         raise ValueError("Calendars used different input identities")
     # Start when the last calendar opens its first portfolio. Exclude unequal
@@ -173,6 +178,7 @@ def collect(root: Path, output: Path) -> None:
                 "end": str(daily["date"].max()),
                 "rows": daily.height,
                 "risk_calibration_multiplier": allocations[0],
+                "volatility_target": targets[0],
                 "cost_max_absolute_error": error,
                 "same_weekday_event_collisions": collisions.to_dicts(),
                 "standalone_reference_notional": 5_000_000,

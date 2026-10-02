@@ -67,6 +67,9 @@ def replay(args: argparse.Namespace) -> None:
     configs[
         "portfolio_allocation"
     ].risk.volatility.calibration_multiplier = args.calibration
+    configs[
+        "portfolio_allocation"
+    ].portfolio_optimizer.optimizer.volatility_target_annual = args.volatility_target
     schedule = configs["tranching"].tranche_backtester.tranche_config
     chosen = schedule.tranche_schedule[args.offset]
     assert chosen.rebalancing_calendar.default_offset == args.offset
@@ -211,7 +214,10 @@ def main() -> None:
     parser.add_argument("--weekday", type=int, choices=range(1, 6), required=True)
     parser.add_argument("--offset", type=int, choices=range(3), required=True)
     parser.add_argument("--calibration", type=float, required=True)
+    parser.add_argument("--volatility-target", type=float, default=0.07)
     parser.add_argument("--attempt", type=int, default=1)
+    parser.add_argument("--experiment-id", default="rebalancing:exp:ridge80-calendar")
+    parser.add_argument("--run-prefix", default="rebalancing:ridge80:run")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     with (args.database.parent / "heavy_compute.lock").open("a+") as lock:
@@ -220,9 +226,9 @@ def main() -> None:
         name = f"w{args.weekday}-o{args.offset}-a{args.attempt}"
         record: dict[str, Any] = dict(
             kind="run",
-            id="rebalancing:ridge80:run:" + name,
+            id=args.run_prefix + ":" + name,
             project_id="rebalance_tranching",
-            experiment_id="rebalancing:exp:ridge80-calendar",
+            experiment_id=args.experiment_id,
             title="Ridge B3 calendar " + name,
             summary="Frozen-score native calendar replay.",
             execution_kind="replay",
@@ -240,14 +246,19 @@ def main() -> None:
                 ),
                 runner=json.dumps(identity(Path(__file__))),
                 calibration=str(args.calibration),
+                volatility_target=str(args.volatility_target),
                 output=str(args.output),
             ),
-            evidence=[dict(record_id="rebalancing:exp:ridge80-calendar", revision=1)],
+            evidence=[dict(record_id=args.experiment_id, revision=1)],
         )
         receipt = register(args, record)
         try:
             replay(args)
             record["status"] = "completed"
+        except KeyboardInterrupt:
+            record["status"] = "interrupted"
+            record["failure_reason"] = "Replay interrupted before completion"
+            raise
         except Exception as error:
             record["status"] = "failed"
             record["failure_reason"] = repr(error)
