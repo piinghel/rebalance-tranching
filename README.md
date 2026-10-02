@@ -1,7 +1,9 @@
 # Rebalance tranching
 
 Code and portfolio-level evidence for
-[Reducing Rebalancing Luck](https://piinghel.github.io/quants/2025/05/10/rebalancing-luck.html).
+[Reducing Rebalancing Luck](https://piinghel.github.io/quants/rebalancing-luck.html).
+Published figures belong in the blog's `assets/rebalancing-luck/` folder; pass
+that destination with `ridge_figures --output` when refreshing the article.
 
 ## Start with the sleeves
 
