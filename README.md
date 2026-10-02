@@ -39,11 +39,20 @@ uv run python -m rebalance_tranching.ridge_figures --input data/ridge80_calendar
 The figure exporter reuses `scripts/blog_charts.py` from the
 [blog repository](https://github.com/piinghel/piinghel.github.io).
 The evidence command retains Development, Later and full-history metrics,
-trading activity and joint-calendar moving-block null comparisons at 21, 63 and
-126 sessions (2,000 draws each, seed 0). The null equalizes arithmetic expected
+trading activity, covariance identities, an equal-fifteenths combination of all
+calendars, and joint-calendar moving-block null comparisons at 21, 63 and
+126 sessions (2,000 draws each, seed 0). The all-calendar combination averages
+returns and turnover and sums order counts before any cross-book netting.
+The null equalizes arithmetic expected
 returns; its tail probability does not prove that all calendar effects are luck.
 The figure command exports light/dark, desktop/phone SVGs and allowlisted
 interactive chart data.
+The calendar figure compares return ranges and mean annual order counts for
+one, two and three tranches: 15 standalone schedules, 15 same-weekday pairs,
+and five weekly-third portfolios. Pairs alternate one- and two-week rebalance
+gaps. The ranges describe these enumerated choices, not confidence intervals
+or an equal-count statistical comparison. The evidence also retains the five
+weekday returns at each fixed starting week for matched comparisons.
 
 #### Replaying the underlying books
 

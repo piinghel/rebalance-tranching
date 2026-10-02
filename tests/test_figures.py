@@ -45,7 +45,8 @@ def test_current_figures_export_vector_matching_theme_layouts(tmp_path, mobile, 
             assert "Week 1" in text and "Week 2" in text and "Week 3" in text
             assert "Three" in text and "tranches" in text
         else:
-            assert "One schedule" in text and "⅓ each week" in text
-            assert "2.65 pp spread" in text and "0.95 pp spread" in text
+            assert "Calendar spread (pp)" in text and "Orders per year" in text
+            assert "Number of tranches" in text
+            assert "1.26" in text and "0.95" in text and "7,288" in text
         assert not list(svg.iter("{http://www.w3.org/2000/svg}image"))
     assert bounds[0] == bounds[1]

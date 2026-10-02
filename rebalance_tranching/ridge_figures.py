@@ -16,7 +16,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import FixedLocator, MaxNLocator, NullLocator, ScalarFormatter
 
-from rebalance_tranching.calendar_grid import combine_grid, grid_metrics
+from rebalance_tranching.calendar_grid import combine_grid, tranche_comparison
 
 matplotlib.use("Agg")
 plt.rcParams.update(
@@ -142,89 +142,93 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
 
 
 def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> None:
-    """Compare the dispersion of standalone calendars with weekly thirds."""
+    """Show the observed dispersion/trading trade-off through weekly thirds."""
     colors = theme(dark)
-    fig, axs = plt.subplots(
-        2 if mobile else 1,
-        1 if mobile else 2,
-        figsize=(5.2, 6.4) if mobile else (10, 3.5),
-        squeeze=False,
-    )
-    fig.patch.set_facecolor(colors["background"])
     frames = [
-        grid_metrics(daily.lazy().filter(expression).collect())
+        tranche_comparison(daily.lazy().filter(expression).collect())
         for expression in [
             pl.col("date") < pl.date(2022, 1, 1),
             pl.col("date") >= pl.date(2022, 1, 1),
         ]
     ]
-    low = min(f["net_cagr"].to_numpy().min() for f in frames)
-    high = max(f["net_cagr"].to_numpy().max() for f in frames)
-    pad = (high - low) * 0.08
-    for ax, frame, title in zip(
-        axs.flat, frames, ["1998–2021", "2022–May 2026"], strict=True
+    fig, axs = plt.subplots(
+        2 if mobile else 1,
+        1 if mobile else 2,
+        figsize=(5.2, 7.6) if mobile else (10, 4.2),
+        squeeze=False,
+    )
+    fig.patch.set_facecolor(colors["background"])
+    for ax, metric, title in zip(
+        axs.flat,
+        ["spread_pp", "annual_orders"],
+        ["Calendar spread (pp)", "Orders per year"],
+        strict=True,
     ):
         axes_style(ax, colors, mobile=mobile)
-        for count, y, label, color in [
-            (1, 1, "One schedule", colors["single"]),
-            (3, 0, "⅓ each week", colors["combined"]),
-        ]:
-            values = (
-                frame.lazy()
-                .filter(pl.col("sleeves") == count)
-                .sort("net_cagr")
-                .select("net_cagr")
-                .collect()["net_cagr"]
-                .to_numpy()
+        for i, (frame, period, color, dash) in enumerate(
+            zip(
+                frames,
+                ["1998–2021", "2022–May 2026"],
+                [colors["single"], colors["combined"]],
+                ["--", "-"],
+                strict=True,
             )
-            ax.plot([values.min(), values.max()], [y, y], color=color, lw=3, alpha=0.45)
-            # Small vertical offsets reveal overlapping calendars; only x encodes return.
-            offsets = (np.arange(len(values)) % 3 - 1) * 0.07
-            ax.scatter(values, y + offsets, s=34, color=color, zorder=3)
-            transform = ax.get_yaxis_transform()
-            ax.text(
-                0,
-                y + 0.3,
-                label,
-                transform=transform,
-                color=colors["ink"],
-                fontsize=13 if mobile else 11,
-                fontweight="semibold",
-            )
-            ax.text(
-                1,
-                y + 0.3,
-                f"{np.ptp(values):.2f} pp spread",
-                transform=transform,
+        ):
+            values = frame[metric].to_numpy()
+            other = frames[1 - i][metric].to_numpy()
+            ax.plot(
+                [1, 2, 3],
+                values,
                 color=color,
-                ha="right",
-                fontsize=12 if mobile else 11,
+                ls=dash,
+                marker="o",
+                lw=1.8,
+                label=period,
             )
-        ax.set_yticks([])
-        ax.set_ylim(-0.4, 1.65)
-        ax.set_xlim(low - pad, high + pad)
-        ax.xaxis.set_major_locator(MaxNLocator(4, steps=[1, 2, 5, 10]))
-        ax.grid(axis="x", color=colors["grid"], lw=0.6)
+            for count, value, comparison in zip([1, 2, 3], values, other, strict=True):
+                above = value >= comparison
+                ax.annotate(
+                    f"{value:.2f}" if metric == "spread_pp" else f"{value:,.0f}",
+                    (count, value),
+                    xytext=(0, 8 if above else -10),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom" if above else "top",
+                    color=color,
+                    fontsize=12 if mobile else 11,
+                )
+        maximum = max(float(f[metric].to_numpy().max()) for f in frames)
+        ax.set_ylim(0, maximum * 1.18)
+        ax.set_xlim(0.75, 3.25)
+        ax.set_xticks([1, 2, 3])
+        ax.yaxis.set_major_locator(MaxNLocator(4, steps=[1, 2, 5, 10]))
+        ax.grid(axis="y", color=colors["grid"], lw=0.6)
         ax.set_xlabel(
-            "Annualized net return (%)",
-            color=colors["ink"],
-            fontsize=13 if mobile else 11,
-            labelpad=12,
+            "Number of tranches", color=colors["ink"], fontsize=12, labelpad=10
         )
         ax.set_title(
             title,
             loc="left",
             color=colors["ink"],
             fontsize=14 if mobile else 13,
-            fontweight="semibold",
             pad=15,
         )
+    handles, labels = axs.flat[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=2,
+        frameon=False,
+        labelcolor=colors["ink"],
+        fontsize=12 if mobile else 11,
+    )
     fig.subplots_adjust(
-        left=0.08,
-        right=0.97,
-        top=0.90 if mobile else 0.83,
-        bottom=0.10 if mobile else 0.20,
-        wspace=0.25,
+        left=0.13 if mobile else 0.07,
+        right=0.96,
+        top=0.88 if mobile else 0.79,
+        bottom=0.09 if mobile else 0.17,
+        wspace=0.33,
         hspace=0.65,
     )
     save_svg(fig, output)
@@ -286,21 +290,18 @@ def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
         ("1998–2021", pl.col("date") < pl.date(2022, 1, 1)),
         ("2022–May 2026", pl.col("date") >= pl.date(2022, 1, 1)),
     ]:
-        frame = grid_metrics(daily.lazy().filter(expression).collect())
+        frame = tranche_comparison(daily.lazy().filter(expression).collect())
         panels.append(
             dict(
                 title=title,
-                points=frame.lazy()
-                .select("weekday", "schedules", "net_cagr")
-                .collect()
-                .to_dicts(),
+                points=frame.to_dicts(),
             )
         )
     (output / "ridge-calendars.json").write_text(
         json.dumps(
             dict(
                 version=1,
-                charts={"calendars": dict(kind="calendar-comparison", panels=panels)},
+                charts={"calendars": dict(kind="tranche-tradeoff", periods=panels)},
             ),
             allow_nan=False,
         )

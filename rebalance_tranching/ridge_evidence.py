@@ -9,8 +9,71 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from rebalance_tranching.calendar_grid import combine_grid, grid_metrics
+from rebalance_tranching.analysis import summarize
+from rebalance_tranching.calendar_grid import (
+    combine_grid,
+    grid_metrics,
+    tranche_comparison,
+)
 from rebalance_tranching.schedule_luck import null_spreads, spread, wide_returns
+
+
+def covariance_checks(returns: np.ndarray, keys: list[tuple[int, int]]) -> list[dict]:
+    """Separate exact variance accounting from equal-vol and log-growth approximations."""
+    rows = []
+    for weekday in range(1, 6):
+        values = returns[:, [i for i, (day, _) in enumerate(keys) if day == weekday]]
+        covariance = np.cov(values, rowvar=False, ddof=1) * 252
+        volatilities = np.sqrt(np.diag(covariance))
+        rho = float(np.corrcoef(values.T)[np.triu_indices(3, 1)].mean())
+        blend = values.mean(axis=1)
+        blend_variance = float(blend.var(ddof=1) * 252)
+        rows.append(
+            dict(
+                weekday=weekday,
+                mean_correlation=rho,
+                mean_standalone_volatility=float(volatilities.mean() * 100),
+                combined_volatility=float(np.sqrt(blend_variance) * 100),
+                equal_volatility_approximation=float(
+                    volatilities.mean() * np.sqrt((1 + 2 * rho) / 3) * 100
+                ),
+                variance_identity_error=float(
+                    abs(covariance.sum() / 9 - blend_variance)
+                ),
+                log_growth_gain_pp=float(
+                    (np.log1p(blend).mean() - np.log1p(values).mean()) * 252 * 100
+                ),
+                second_order_log_growth_gain_pp=float(
+                    (np.square(values).mean() - np.square(blend).mean()) * 252 * 50
+                ),
+            )
+        )
+    return rows
+
+
+def all_calendar_metrics(sample: pl.DataFrame) -> dict:
+    """Equal fifteenths of executed books, before any cross-calendar order netting."""
+    daily = (
+        sample.lazy()
+        .group_by("date")
+        .agg(
+            pl.col("gross", "net", "traded_notional").mean(),
+            pl.col("order_count").sum(),
+        )
+        .with_columns(pl.lit("all15").alias("schedules"), pl.lit(15).alias("sleeves"))
+        .sort("date")
+        .collect()
+    )
+    activity = (
+        daily.lazy()
+        .select(
+            (pl.col("traded_notional").mean() * 252).alias("annual_turnover"),
+            (pl.col("order_count").mean() * 252).alias("annual_orders"),
+        )
+        .collect()
+        .row(0, named=True)
+    )
+    return {**summarize(daily).row(0, named=True), **activity}
 
 
 def evidence(daily: pl.DataFrame) -> dict[str, dict[str, object]]:
@@ -92,6 +155,9 @@ def evidence(daily: pl.DataFrame) -> dict[str, dict[str, object]]:
             null=uncertainty,
             activity=activity_summary.to_dicts(),
             mean_same_weekday_correlation=float(np.mean(correlations)),
+            covariance_checks=covariance_checks(returns, keys),
+            all_calendar_blend=all_calendar_metrics(sample),
+            tranche_comparison=tranche_comparison(sample).to_dicts(),
             calendars=metrics.to_dicts(),
         )
     return result

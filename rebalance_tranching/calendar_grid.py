@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 from pathlib import Path
 
@@ -11,7 +12,7 @@ import polars as pl
 from rebalance_tranching.analysis import summarize
 
 
-def combine_grid(daily: pl.DataFrame) -> pl.DataFrame:
+def combine_grid(daily: pl.DataFrame, *, include_pairs: bool = False) -> pl.DataFrame:
     """Preserve notional; sum order counts while averaging returns and turnover."""
     keys = ["date", "weekday", "offset"]
     checks = (
@@ -59,27 +60,36 @@ def combine_grid(daily: pl.DataFrame) -> pl.DataFrame:
         )
         .select(*columns, *optional)
     )
-    combined = (
-        daily.lazy()
-        .group_by("date", "weekday")
-        .agg(
-            pl.col("gross", "net").mean(),
-            *[
-                pl.col(c).sum() if c == "order_count" else pl.col(c).mean()
-                for c in optional
-            ],
-        )
-        .with_columns(pl.lit("1+2+3").alias("schedules"), pl.lit(3).alias("sleeves"))
-        .select(*columns, *optional)
-    )
+    combined = []
+    for count in (2, 3) if include_pairs else (3,):
+        for members in itertools.combinations(range(3), count):
+            combined.append(
+                daily.lazy()
+                .filter(pl.col("offset").is_in(members))
+                .group_by("date", "weekday")
+                .agg(
+                    pl.col("gross", "net").mean(),
+                    *[
+                        pl.col(c).sum() if c == "order_count" else pl.col(c).mean()
+                        for c in optional
+                    ],
+                )
+                .with_columns(
+                    pl.lit("+".join(str(i + 1) for i in members)).alias("schedules"),
+                    pl.lit(count).alias("sleeves"),
+                )
+                .select(*columns, *optional)
+            )
     return (
-        pl.concat([standalone, combined]).sort("weekday", "schedules", "date").collect()
+        pl.concat([standalone, *combined])
+        .sort("weekday", "schedules", "date")
+        .collect()
     )
 
 
-def grid_metrics(daily: pl.DataFrame) -> pl.DataFrame:
+def grid_metrics(daily: pl.DataFrame, *, include_pairs: bool = False) -> pl.DataFrame:
     """Recompute every weekday's portfolios, then return comparable calendar cells."""
-    combined = combine_grid(daily)
+    combined = combine_grid(daily, include_pairs=include_pairs)
     return pl.concat(
         [
             summarize(combined.lazy().filter(pl.col("weekday") == weekday).collect())
@@ -88,6 +98,30 @@ def grid_metrics(daily: pl.DataFrame) -> pl.DataFrame:
             .collect()
             for weekday in range(1, 6)
         ]
+    )
+
+
+def tranche_comparison(daily: pl.DataFrame) -> pl.DataFrame:
+    """Descriptive calendar ranges and trading activity at one, two and three books."""
+    metrics = (
+        grid_metrics(daily, include_pairs=True)
+        .lazy()
+        .group_by("sleeves")
+        .agg(
+            pl.len().alias("calendar_count"),
+            (pl.col("net_cagr").max() - pl.col("net_cagr").min()).alias("spread_pp"),
+        )
+    )
+    activity = (
+        combine_grid(daily, include_pairs=True)
+        .lazy()
+        .group_by("weekday", "schedules", "sleeves")
+        .agg((pl.col("order_count").mean() * 252).alias("annual_orders"))
+        .group_by("sleeves")
+        .agg(pl.col("annual_orders").mean())
+    )
+    return (
+        metrics.join(activity, on="sleeves", validate="1:1").sort("sleeves").collect()
     )
 
 
