@@ -1,7 +1,7 @@
 # Rebalance tranching
 
 Code and portfolio-level evidence for
-[Combining Rebalance Weeks Reduces Timing Risk](https://piinghel.github.io/quants/2025/05/10/rebalancing-luck.html).
+[Reducing Rebalancing Luck](https://piinghel.github.io/quants/2025/05/10/rebalancing-luck.html).
 
 ## Start with the sleeves
 
@@ -18,6 +18,71 @@ using the same [mixture calculation](rebalance_tranching/analysis.py) as the stu
 The example does not simulate stock holdings or claim a historical result.
 
 ## Reproduce the results
+
+### Ridge-80 calendar comparison
+
+The Ridge-80 study uses saved `ridge_80_c0p1` forecasts and the B3 allocation,
+with 21-session main volatility and a 1.18 volatility calibration multiplier.
+`data/ridge80_calendar_daily.parquet` contains the matched portfolio aggregates;
+`data/ridge80_calendar_events.csv` contains the signal and ledger dates.
+Their hashes and input identities are in `SOURCE_FILES.json`. No security-level
+positions, predictions or licensed market data are included.
+
+Reproduce the article calculations and figures from those aggregates:
+
+```sh
+uv run python -m rebalance_tranching.calendar_grid --input data/ridge80_calendar_daily.parquet --output output/ridge80
+uv run python -m rebalance_tranching.ridge_evidence --input data/ridge80_calendar_daily.parquet --output output/ridge80/article_metrics.json
+uv run python -m rebalance_tranching.ridge_figures --input data/ridge80_calendar_daily.parquet --output output/ridge80/figures --blog /path/to/piinghel.github.io
+```
+
+The figure exporter reuses `scripts/blog_charts.py` from the
+[blog repository](https://github.com/piinghel/piinghel.github.io).
+The evidence command retains Development, Later and full-history metrics,
+trading activity and joint-calendar moving-block null comparisons at 21, 63 and
+126 sessions (2,000 draws each, seed 0). The null equalizes arithmetic expected
+returns; its tail probability does not prove that all calendar effects are luck.
+The figure command exports light/dark, desktop/phone SVGs and allowlisted
+interactive chart data.
+
+#### Replaying the underlying books
+
+`scripts/replay_calendar.py` replays one weekday/offset using the native
+portfolio-optimization research runtime. It requires that runtime and the
+licensed inputs; they are deliberately not dependencies or data of this public
+mixture-analysis package. Each process acquires the shared heavy-compute lock,
+records its actual execution, and refuses to overwrite outputs. Run one process
+at a time, for weekdays 1–5 and offsets 0–2, using these explicit arguments:
+
+```sh
+python scripts/replay_calendar.py \
+  --base /path/to/ridge_80_c0p1/backtest/config_resolved.yaml \
+  --allocation-dir /path/to/portfolio_optimization/configs/portfolio_management \
+  --panel /path/to/normalized/panel.parquet \
+  --predictions /path/to/ridge_80_c0p1/backtest/predictions.parquet \
+  --registry /path/to/research-registry --database /path/to/registry.sqlite \
+  --weekday 5 --offset 0 --calibration 1.18 --output /path/to/runs/w5_o0
+```
+
+Use a new destination and increment `--attempt` for an actual retry. The
+configuration is inherited from `allocation_b3_state_aware_mvo.yaml` and its
+parent; the calibration multiplier is explicit. Each standalone calendar is
+executed at $5 million reference capital. Mixtures scale these executed books
+to thirds: they preserve daily return and proportional-cost arithmetic without
+re-solving or re-rounding smaller orders. The collector checks all 15 completed
+executions, common inputs, solver status, risk limits, matched dates and costs.
+
+```sh
+uv run python -m rebalance_tranching.collect_ridge --input /path/to/runs --output /path/to/aggregates
+```
+
+The native runner's optional imports are checked in its separate runtime; the
+four package checks below cover the public calculation and rendering modules.
+
+### Historical comparison
+
+The remaining inputs and original figure commands retain the earlier Ridge
+comparison. Keep them separate from the Ridge-80 files above.
 
 ```bash
 uv run python -m rebalance_tranching.analysis
@@ -123,8 +188,9 @@ The three Friday replays reconcile to the original daily evidence within
 development. Later-period metrics reproduce exactly. Original input files are
 retained unchanged. All included data are portfolio-level aggregates.
 
-This repository reproduces mixtures and figures from the included portfolio returns;
-it does not reconstruct the stock-selection and execution backtests behind each sleeve.
+The included portfolio returns reproduce the mixtures and figures. Replaying
+the underlying stock books requires the separate runtime and licensed inputs
+described above.
 
 ## Checks
 

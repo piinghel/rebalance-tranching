@@ -37,6 +37,28 @@
     "data/timing_metrics.csv": "e69c30c9d422b95cc45e255c44f38a3ab0e6d038e28fb3b3b279278cfc556349",
     "data/schedule_returns.csv": "470236e462819d55a6cffd16b4b478104c3e004f9d03ba9e24af8f90a8c9ddc2",
     "data/calendar_daily.parquet": "4912ca9104ae8de4cf23cbbdceea7f4d68000c3f482715bbc5f2d8b1b3b2bac5",
-    "data/calendar_events.csv": "c9f40290334d7264c2509add2c8be2eb90c0f963ffdc81deede72d49265b688f"
+    "data/calendar_events.csv": "c9f40290334d7264c2509add2c8be2eb90c0f963ffdc81deede72d49265b688f",
+    "data/ridge80_calendar_daily.parquet": "c57f023b700db12366a629cef8cff5d9f08dfd6b184e8a469a9a1e06b0ad9f9e",
+    "data/ridge80_calendar_events.csv": "73e4a38485141a1f5fa00931ebdefcabeb64dba50cfa88e2e9a880624eae2640"
+  },
+  "ridge80_calendar_grid": {
+    "generated_on": "2026-10-02",
+    "model": "Ridge, 80 ranking predictors, c=0.1",
+    "input_sha256": {
+      "base": "2745d38ee9e92c307c41f03bd04d48c7ab42319bd60f6ec0ad7306e9ea5610a3",
+      "panel": "afe772e29ea524a0903609e9320e6b5a33cb9c9c3e1847fd3c9a901837315cee",
+      "predictions": "305b1f0b5da01c4707a455e8e3a7ff2d67e10be3d291308441e292090c9ca48b"
+    },
+    "allocation": "B3 state-aware mean-variance",
+    "volatility_window": 21,
+    "volatility_calibration_multiplier": 1.18,
+    "anchor_week": "1998-08-31",
+    "start": "1998-09-22",
+    "end": "2026-05-27",
+    "trading_cost_bp": 5,
+    "optimization_trading_penalty_bp": 2.5,
+    "execution_lag_sessions": 1,
+    "reference_capital": 5000000,
+    "scope": "Fifteen standalone calendar replays. Portfolio aggregates only. Same-weekday mixtures average daily fixed-notional returns, costs and traded notional; executed-order counts add."
   }
 }
