@@ -12,6 +12,7 @@ import polars as pl
 from rebalance_tranching.analysis import summarize
 from rebalance_tranching.calendar_grid import (
     combine_grid,
+    decompose,
     grid_metrics,
     tranche_comparison,
 )
@@ -145,6 +146,15 @@ def evidence(daily: pl.DataFrame) -> dict[str, dict[str, object]]:
         for day in range(1, 6):
             values = returns[:, [i for i, (w, _) in enumerate(keys) if w == day]]
             correlations.extend(np.corrcoef(values.T)[np.triu_indices(3, 1)].tolist())
+        decomposition = decompose(metrics)
+        fixed_weekday_sd = (
+            metrics.lazy()
+            .filter(pl.col("sleeves") == 1)
+            .group_by("schedules")
+            .agg(pl.col("net_cagr").std(ddof=0).alias("sd_pp"))
+            .sort("schedules")
+            .collect()
+        )
         result[period] = dict(
             start=str(sample["date"].min()),
             end=str(sample["date"].max()),
@@ -158,6 +168,15 @@ def evidence(daily: pl.DataFrame) -> dict[str, dict[str, object]]:
             covariance_checks=covariance_checks(returns, keys),
             all_calendar_blend=all_calendar_metrics(sample),
             tranche_comparison=tranche_comparison(sample).to_dicts(),
+            calendar_decomposition=dict(
+                sums_of_squares=decomposition,
+                share_pct={
+                    key: 100 * value / decomposition["total"]
+                    for key, value in decomposition.items()
+                    if key != "total"
+                },
+            ),
+            fixed_start_week_weekday_sd=fixed_weekday_sd.to_dicts(),
             calendars=metrics.to_dicts(),
         )
     return result

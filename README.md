@@ -49,12 +49,16 @@ The null equalizes arithmetic expected
 returns; its tail probability does not prove that all calendar effects are luck.
 The figure command exports light/dark, desktop/phone SVGs and allowlisted
 interactive chart data.
-The calendar figure compares return ranges and mean annual order counts for
+The calendar figure compares population standard deviations of annualized
+geometric net returns and mean annual order counts for
 one, two and three tranches: 15 standalone schedules, 15 same-weekday pairs,
 and five weekly-third portfolios. Pairs alternate one- and two-week rebalance
-gaps. The ranges describe these enumerated choices, not confidence intervals
-or an equal-count statistical comparison. The evidence also retains the five
-weekday returns at each fixed starting week for matched comparisons.
+gaps. Each enumerated implementation has equal weight within its group. This
+dispersion describes calendar choices, not sampling uncertainty or daily return
+volatility. The evidence also retains the five weekday returns at each fixed
+starting week and decomposes the standalone grid's squared deviations into
+weekday, starting-week and interaction terms. The terms sum to total variation;
+the interaction cannot be assigned uniquely to either calendar dimension.
 
 #### Replaying the underlying books
 

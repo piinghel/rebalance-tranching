@@ -160,8 +160,8 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
     fig.patch.set_facecolor(colors["background"])
     for ax, metric, title in zip(
         axs.flat,
-        ["spread_pp", "annual_orders"],
-        ["Calendar spread (pp)", "Orders per year"],
+        ["sd_pp", "annual_orders"],
+        ["Return dispersion (pp)", "Orders per year"],
         strict=True,
     ):
         axes_style(ax, colors, mobile=mobile)
@@ -188,7 +188,7 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
             for count, value, comparison in zip([1, 2, 3], values, other, strict=True):
                 above = value >= comparison
                 ax.annotate(
-                    f"{value:.2f}" if metric == "spread_pp" else f"{value:,.0f}",
+                    f"{value:.2f}" if metric == "sd_pp" else f"{value:,.0f}",
                     (count, value),
                     xytext=(0, 8 if above else -10),
                     textcoords="offset points",

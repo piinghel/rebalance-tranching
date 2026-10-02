@@ -102,14 +102,14 @@ def grid_metrics(daily: pl.DataFrame, *, include_pairs: bool = False) -> pl.Data
 
 
 def tranche_comparison(daily: pl.DataFrame) -> pl.DataFrame:
-    """Descriptive calendar ranges and trading activity at one, two and three books."""
+    """Population calendar dispersion and activity at one, two and three books."""
     metrics = (
         grid_metrics(daily, include_pairs=True)
         .lazy()
         .group_by("sleeves")
         .agg(
             pl.len().alias("calendar_count"),
-            (pl.col("net_cagr").max() - pl.col("net_cagr").min()).alias("spread_pp"),
+            pl.col("net_cagr").std(ddof=0).alias("sd_pp"),
         )
     )
     activity = (

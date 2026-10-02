@@ -75,3 +75,23 @@ def test_additive_calendar_effects_have_no_interaction():
     assert ss["total"] == pytest.approx(
         sum(ss[k] for k in ("weekday", "offset", "interaction"))
     )
+
+
+def test_weekday_dependent_offset_effect_is_interaction():
+    frame = pl.DataFrame(
+        [
+            {
+                "weekday": day,
+                "schedules": str(offset + 2),
+                "sleeves": 1,
+                "net_cagr": float(10 + (day - 3) * offset),
+            }
+            for day in range(1, 6)
+            for offset in (-1, 0, 1)
+        ]
+    )
+    ss = decompose(frame)
+    assert ss["weekday"] == pytest.approx(0)
+    assert ss["offset"] == pytest.approx(0)
+    assert ss["interaction"] == pytest.approx(20)
+    assert ss["total"] == pytest.approx(20)
