@@ -68,7 +68,7 @@ def test_initial_loss_counts_toward_drawdown():
     assert math.isfinite(summary["sharpe"])
 
 
-def test_saved_three_sleeve_returns_match_the_funded_daily_mean():
+def test_saved_three_sleeve_returns_match_the_fixed_notional_daily_mean():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "data"

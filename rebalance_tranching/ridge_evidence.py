@@ -13,9 +13,9 @@ from rebalance_tranching.calendar_grid import combine_grid, grid_metrics
 from rebalance_tranching.schedule_luck import null_spreads, spread, wide_returns
 
 
-def evidence(daily: pl.DataFrame) -> dict:
+def evidence(daily: pl.DataFrame) -> dict[str, dict[str, object]]:
     portfolios = combine_grid(daily)
-    result = {}
+    result: dict[str, dict[str, object]] = {}
     for period, expression in [
         ("development", pl.col("date") < pl.date(2022, 1, 1)),
         ("later", pl.col("date") >= pl.date(2022, 1, 1)),
@@ -97,12 +97,17 @@ def evidence(daily: pl.DataFrame) -> dict:
     return result
 
 
-if __name__ == "__main__":
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     result = evidence(pl.scan_parquet(args.input).collect())
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(result, indent=2, default=str, allow_nan=False) + "\n"
     )
+
+
+if __name__ == "__main__":
+    main()

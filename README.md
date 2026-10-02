@@ -81,63 +81,35 @@ four package checks below cover the public calculation and rendering modules.
 
 ### Historical comparison
 
-The remaining inputs and original figure commands retain the earlier Ridge
-comparison. Keep them separate from the Ridge-80 files above.
+The other included inputs retain the earlier Ridge comparison. Their hashes
+and source identities remain in `SOURCE_FILES.json`; keep them separate from
+the Ridge-80 files above. The shared calculations still accept those inputs:
 
 ```bash
 uv run python -m rebalance_tranching.analysis
-uv run python -m rebalance_tranching.performance
-uv run python -m rebalance_tranching.dispersion
+uv run python -m rebalance_tranching.calendar_grid --input data/calendar_daily.parquet --output output/historical
+uv run python -m rebalance_tranching.schedule_luck --input data/calendar_daily.parquet --output output/historical/luck
 ```
 
-The first command prints return, volatility, Sharpe and drawdown for all seven
-non-empty combinations of the three schedules, separately for Development and Later.
-It writes no files. `--input path/to/timing_daily.parquet` selects another daily input.
+The first command prints statistics for all seven non-empty combinations of
+three schedules. The calendar command writes combined daily returns, period
+and annual metrics, descriptive calendar dispersion, and trading activity.
+The last command adds joint moving-block null diagnostics and rolling-window
+comparisons. The original figure layouts are recoverable at Git revision
+`5e2cb8d`; the maintained renderer is `ridge_figures.py`.
 
-The second command rebuilds the article's performance chart in light/dark and
-desktop/phone layouts. The third retains the supporting combination-dispersion
-figure. Both write SVGs to `output/` by default; use `--output` for another directory.
-The performance and calendar-grid renderers also export 300 dpi PNGs. Published
-figures use the SVGs for sharp text and lines at every screen size. Generated
-outputs are ignored by Git.
-
-The complete starting-week × signal-weekday comparison uses the same saved
-forecasts and allocation rules for all 15 calendars:
-
-```bash
-uv run python -m rebalance_tranching.calendar_grid --input data/calendar_daily.parquet --output output/calendar
-uv run python -m rebalance_tranching.grid_figures --input output/calendar --output output
-```
-
-Test whether the spread between the 15 schedules exceeds luck: a moving-block
-bootstrap (63-session blocks) of the demeaned daily returns gives the spread
-expected when no schedule is better. The same run reports spreads in windows as
-long as the later period, yearly spreads, fixed-starting-week spreads and a
-mixture of all 15 schedules.
-
-```bash
-uv run python -m rebalance_tranching.schedule_luck --input data/calendar_daily.parquet --output output/schedule-luck-2026-09-27
-```
-
-This writes daily gross/net returns for the 15 standalone calendars and five
-three-tranche portfolios, period and annual metrics, calendar ranges and
-population standard deviations, a descriptive offset/weekday/interaction
-decomposition, and trading activity. The calendar grid and return/volatility
-panels use the full matched period, 22 September 1998–27 May 2026. The Friday
-growth chart shows January 2022–May 2026 to make the later divergence visible.
-Development and later results remain separate in
-the period outputs so the long development history does not hide recent differences.
-The decomposition describes this anchored grid; it is not an independent-sample
-significance test. Annual comparisons include complete years 1999–2025.
+## Code layout
 
 | File | Purpose |
 | --- | --- |
 | [analysis.py](rebalance_tranching/analysis.py) | Matched-calendar validation, fixed-notional mixtures and metrics |
 | [example.py](rebalance_tranching/example.py) | Six-week schedule and hand-checkable daily mixture |
-| [performance.py](rebalance_tranching/performance.py) | Later-period fixed best/worst Friday paths and the three-tranche portfolio |
-| [dispersion.py](rebalance_tranching/dispersion.py) | Return and volatility across all schedule combinations |
 | [calendar_grid.py](rebalance_tranching/calendar_grid.py) | Fifteen calendars, five combined portfolios and matched comparisons |
-| [grid_figures.py](rebalance_tranching/grid_figures.py) | Calendar heatmap and aligned return/volatility panels |
+| [collect_ridge.py](rebalance_tranching/collect_ridge.py) | Validate completed native runs and export matched portfolio aggregates |
+| [schedule_luck.py](rebalance_tranching/schedule_luck.py) | Joint-calendar resampling and return-spread diagnostics |
+| [ridge_evidence.py](rebalance_tranching/ridge_evidence.py) | Article metrics, trading activity and block-length comparisons |
+| [ridge_figures.py](rebalance_tranching/ridge_figures.py) | Both article figures, theme/viewport variants and interactive data |
+| [replay_calendar.py](scripts/replay_calendar.py) | Optional native replay and execution registration |
 
 ## Inputs and conventions
 
@@ -158,7 +130,8 @@ Paths retain their own volatilities, so compare risk as well as cumulative retur
 
 ### Calendar grid
 
-`data/calendar_daily.parquet` has 6,963 matched dates (22 September 1998–27 May
+Both `data/ridge80_calendar_daily.parquet` and the historical
+`data/calendar_daily.parquet` have 6,963 matched dates (22 September 1998–27 May
 2026) for each of 15 calendars. `weekday` is the ISO signal weekday (1 = Monday,
 5 = Friday), and `offset` is 0, 1 or 2. Gross/net returns and `trading_cost` are
 daily decimal P&L per unit of fixed notional. `traded_notional` is two-way
@@ -170,7 +143,8 @@ targets roll forward to the next eligible session (at least 90% universe quote
 coverage), duplicate dates are removed, then every third target is selected
 at each offset. Orders execute at the next trading-session close. The ledger
 records the cost on the first following close-to-close P&L date;
-`data/calendar_events.csv` retains both that date and the original signal date.
+The corresponding `*_calendar_events.csv` or `calendar_events.csv` retains
+both that date and the original signal date.
 
 All calendars reuse the original forecasts, point-in-time universe, stock
 selection, sizing rules and gross cap. There is no volatility restoration for
@@ -179,12 +153,12 @@ The combined $5 million portfolio scales each book's executed positions, P&L
 and notional to one third; it does not re-solve integer orders at smaller capital.
 Returns, costs and traded notional average across its three books, while order
 counts add. No cross-offset execution dates coincide within a weekday, so this
-grid claims no netting savings. The 5 bp allowance covers proportional execution
-costs and market impact; fixed-ticket charges, borrow and financing are outside
-the model. No cost-rate sensitivity is part of this comparison.
+grid claims no netting savings. The model charges 5 bp proportionally;
+fixed-ticket charges, borrow, financing and explicit market impact are outside
+the calculation. No cost-rate sensitivity is part of this comparison.
 
-The three Friday replays reconcile to the original daily evidence within
-0.001 bp per day; the largest numerical difference is 0.000566 bp, confined to
+In the historical inputs, the three Friday replays reconcile to the original
+daily evidence within 0.001 bp per day; the largest numerical difference is 0.000566 bp, confined to
 development. Later-period metrics reproduce exactly. Original input files are
 retained unchanged. All included data are portfolio-level aggregates.
 

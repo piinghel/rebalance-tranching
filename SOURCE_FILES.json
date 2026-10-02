@@ -14,6 +14,7 @@
       "source_to_included": {
         "assets/tranching/schedule_returns.csv": "data/schedule_returns.csv"
       },
+      "figure_archive_commit": "5e2cb8d",
       "figure_sources": {
         "scripts/render_timing_performance.py": "rebalance_tranching/performance.py",
         "scripts/render_timing_figure.py": "rebalance_tranching/dispersion.py"

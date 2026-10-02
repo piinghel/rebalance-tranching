@@ -12,6 +12,8 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
 from rebalance_tranching.calendar_grid import combine_grid, grid_metrics
@@ -22,6 +24,7 @@ plt.rcParams.update(
         "font.family": "sans-serif",
         "font.sans-serif": ["DejaVu Sans", "Arial", "sans-serif"],
         "svg.fonttype": "none",
+        "svg.hashsalt": "rebalance-tranching",
     }
 )
 
@@ -31,14 +34,13 @@ def theme(dark: bool) -> dict[str, str]:
         background="#0d1117" if dark else "#ffffff",
         ink="#dce3eb" if dark else "#27343d",
         grid="#36404a" if dark else "#e2e7eb",
-        blue="#c9d1d9" if dark else "#24292f",
-        gray="#727d88" if dark else "#a3acb5",
-        teal="#3987e5" if dark else "#2a78d6",
-        orange="#8b949e" if dark else "#6e7781",
+        range="#727d88" if dark else "#a3acb5",
+        combined="#3987e5" if dark else "#2a78d6",
+        single="#8b949e" if dark else "#6e7781",
     )
 
 
-def axes_style(ax, colors: dict[str, str], *, mobile: bool) -> None:
+def axes_style(ax: Axes, colors: dict[str, str], *, mobile: bool) -> None:
     ax.set_facecolor(colors["background"])
     ax.tick_params(
         colors=colors["ink"], labelsize=13 if mobile else 11, length=0, pad=8
@@ -48,8 +50,8 @@ def axes_style(ax, colors: dict[str, str], *, mobile: bool) -> None:
         spine.set_visible(False)
 
 
-def save_svg(fig, output: Path) -> None:
-    fig.savefig(output, facecolor=fig.get_facecolor())
+def save_svg(fig: Figure, output: Path) -> None:
+    fig.savefig(output, facecolor=fig.get_facecolor(), metadata={"Date": None})
     output.write_text(
         "\n".join(line.rstrip() for line in output.read_text().splitlines()) + "\n"
     )
@@ -71,10 +73,10 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
     axes_style(ax, colors, mobile=mobile)
     lines = []
     for key, label, color, dash in [
-        ("1", "Week 1", "orange", "-"),
-        ("2", "Week 2", "orange", "--"),
-        ("3", "Week 3", "orange", "-."),
-        ("1+2+3", "Three\ntranches" if mobile else "Three tranches", "teal", "-"),
+        ("1", "Week 1", "single", "-"),
+        ("2", "Week 2", "single", "--"),
+        ("3", "Week 3", "single", "-."),
+        ("1+2+3", "Three\ntranches" if mobile else "Three tranches", "combined", "-"),
     ]:
         part = frame.lazy().filter(pl.col("schedules") == key).collect()
         dates = part["date"].to_list()
@@ -162,7 +164,7 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
             ax.plot(
                 [singles["net_cagr"].min(), singles["net_cagr"].max()],
                 [day, day],
-                color=colors["gray"],
+                color=colors["range"],
                 alpha=0.45,
                 lw=1,
             )
@@ -177,14 +179,14 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
                     day + shift,
                     s=25,
                     marker=marker,
-                    color=colors["orange"],
+                    color=colors["single"],
                     zorder=3,
                 )
             blend = (
                 part.lazy().filter(pl.col("sleeves") == 3).collect()["net_cagr"].item()
             )
             ax.scatter(
-                blend, day + 0.27, s=44, marker="D", color=colors["teal"], zorder=4
+                blend, day + 0.27, s=44, marker="D", color=colors["combined"], zorder=4
             )
         ax.set_yticks(
             range(1, 6), ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
@@ -211,7 +213,7 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
         plt.Line2D(
             [],
             [],
-            color=colors["orange"],
+            color=colors["single"],
             marker=m,
             ls="",
             label=f"Week {i + 1}",
@@ -223,7 +225,7 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
         plt.Line2D(
             [],
             [],
-            color=colors["teal"],
+            color=colors["combined"],
             marker="D",
             ls="",
             label="Three tranches",

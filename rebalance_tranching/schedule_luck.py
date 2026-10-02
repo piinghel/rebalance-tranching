@@ -9,7 +9,7 @@ reports spreads in windows as long as the later period, fixed-starting-week
 spreads, yearly spreads and a mixture of all fifteen schedules.
 
     uv run python -m rebalance_tranching.schedule_luck \\
-        --input data/calendar_daily.parquet --output output/schedule-luck-2026-09-27
+        --input data/calendar_daily.parquet --output output/historical/luck
 """
 
 from __future__ import annotations

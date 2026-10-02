@@ -254,10 +254,11 @@ def main() -> None:
             raise
         finally:
             record["provenance"]["finished_at"] = dt.datetime.now(dt.UTC).isoformat()
-            register(args, record, receipt["revision"])
+            # Retain the actual outcome even if the registry is temporarily unavailable.
             (args.output / "execution.json").write_text(
                 json.dumps(record, indent=2) + "\n"
             )
+            register(args, record, receipt["revision"])
 
 
 if __name__ == "__main__":

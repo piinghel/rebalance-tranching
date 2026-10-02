@@ -12,6 +12,87 @@ import polars as pl
 from rebalance_tranching.calendar_grid import combine_grid
 
 
+def optimizer_audit(folder: Path) -> dict[str, object]:
+    """Check the native solver outcome and B3 portfolio risk limits."""
+    diagnostics = pl.scan_parquet(folder / "optimizer_diagnostics.parquet")
+    check = (
+        diagnostics.select(
+            pl.len().alias("events"),
+            (
+                pl.col("status").is_null()
+                | ~pl.col("status").is_in(["optimal", "optimal_inaccurate"])
+            )
+            .sum()
+            .alias("unsolved"),
+            (pl.col("status") == "optimal_inaccurate").sum().alias("inaccurate"),
+            pl.any_horizontal(
+                pl.col(c).is_null() | ~pl.col(c).is_finite()
+                for c in (
+                    "gross",
+                    "net_exposure",
+                    "beta_exposure",
+                    "ex_ante_vol_annual",
+                )
+            )
+            .any()
+            .alias("invalid_risk"),
+            pl.col("gross").max(),
+            pl.col("net_exposure").abs().max(),
+            pl.col("beta_exposure").abs().max(),
+            pl.col("ex_ante_vol_annual").max(),
+        )
+        .collect()
+        .row(0, named=True)
+    )
+    if (
+        not check["events"]
+        or check["unsolved"]
+        or check["invalid_risk"]
+        or check["gross"] > 2.000001
+        or check["net_exposure"] > 0.250001
+        or check["beta_exposure"] > 0.050001
+        or check["ex_ante_vol_annual"] > 0.070001
+    ):
+        raise ValueError(f"Optimizer audit failed: {folder}: {check}")
+    return check
+
+
+def validate_costs(daily: pl.DataFrame) -> float:
+    """Reject missing costs as well as broken executed-notional accounting."""
+    columns = ["trading_cost", "traded_notional", "order_count"]
+    invalid = (
+        daily.lazy()
+        .select(
+            pl.any_horizontal(
+                pl.col(column).is_null()
+                | ~pl.col(column).is_finite()
+                | (pl.col(column) < 0)
+                for column in columns
+            ).any()
+        )
+        .collect()
+        .item()
+    )
+    if invalid:
+        raise ValueError(
+            "Costs, traded notional and order counts must be finite and nonnegative"
+        )
+    error = (
+        daily.lazy()
+        .select(
+            pl.max_horizontal(
+                (pl.col("trading_cost") - pl.col("traded_notional") * 0.0005).abs(),
+                (pl.col("gross") - pl.col("net") - pl.col("trading_cost")).abs(),
+            ).max()
+        )
+        .collect()
+        .item()
+    )
+    if error > 1e-12:
+        raise ValueError("Cost identity failed")
+    return float(error)
+
+
 def collect(root: Path, output: Path) -> None:
     frames, events, hashes, allocations, sources, solver_checks = [], [], {}, [], [], {}
     zero_quantity_rows = {}
@@ -23,49 +104,7 @@ def collect(root: Path, output: Path) -> None:
                 raise ValueError(f"Incomplete execution: {folder}")
             allocations.append(record["provenance"]["calibration"])
             sources.append(record["provenance"]["inputs"])
-            diagnostics = pl.scan_parquet(folder / "optimizer_diagnostics.parquet")
-            check = (
-                diagnostics.select(
-                    pl.len().alias("events"),
-                    (
-                        pl.col("status").is_null()
-                        | ~pl.col("status").is_in(["optimal", "optimal_inaccurate"])
-                    )
-                    .sum()
-                    .alias("unsolved"),
-                    (pl.col("status") == "optimal_inaccurate")
-                    .sum()
-                    .alias("inaccurate"),
-                    pl.any_horizontal(
-                        pl.col(c).is_null() | ~pl.col(c).is_finite()
-                        for c in (
-                            "gross",
-                            "net_exposure",
-                            "beta_exposure",
-                            "ex_ante_vol_annual",
-                        )
-                    )
-                    .any()
-                    .alias("invalid_risk"),
-                    pl.col("gross").max(),
-                    pl.col("net_exposure").abs().max(),
-                    pl.col("beta_exposure").abs().max(),
-                    pl.col("ex_ante_vol_annual").max(),
-                )
-                .collect()
-                .row(0, named=True)
-            )
-            if (
-                not check["events"]
-                or check["unsolved"]
-                or check["invalid_risk"]
-                or check["gross"] > 2.000001
-                or check["net_exposure"] > 0.250001
-                or check["beta_exposure"] > 0.050001
-                or check["ex_ante_vol_annual"] > 0.070001
-            ):
-                raise ValueError(f"Optimizer audit failed: {folder}: {check}")
-            solver_checks[folder.name] = check
+            solver_checks[folder.name] = optimizer_audit(folder)
             path = folder / "daily.parquet"
             hashes[folder.name] = hashlib.sha256(path.read_bytes()).hexdigest()
             trades = pl.scan_parquet(folder / "trades.parquet")
@@ -111,19 +150,7 @@ def collect(root: Path, output: Path) -> None:
         .collect()
     )
     combine_grid(daily)
-    error = (
-        daily.lazy()
-        .select(
-            pl.max_horizontal(
-                (pl.col("trading_cost") - pl.col("traded_notional") * 0.0005).abs(),
-                (pl.col("gross") - pl.col("net") - pl.col("trading_cost")).abs(),
-            ).max()
-        )
-        .collect()
-        .item()
-    )
-    if error > 1e-12:
-        raise ValueError("Cost identity failed")
+    error = validate_costs(daily)
     event_frame = pl.concat(events).collect()
     collisions = (
         event_frame.lazy()

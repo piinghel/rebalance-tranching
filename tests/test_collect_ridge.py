@@ -62,7 +62,7 @@ def inputs(root: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "failure", ["different forecasts", "risk breach", "cost mismatch"]
+    "failure", ["different forecasts", "risk breach", "cost mismatch", "missing costs"]
 )
 def test_collector_rejects_confounded_comparisons(tmp_path, failure):
     root = tmp_path / "runs"
@@ -81,7 +81,9 @@ def test_collector_rejects_confounded_comparisons(tmp_path, failure):
     else:
         path = folder / "daily.parquet"
         pl.read_parquet(path).with_columns(
-            pl.lit(0.003).alias("trading_cost")
+            pl.lit(float("nan") if failure == "missing costs" else 0.003).alias(
+                "trading_cost"
+            )
         ).write_parquet(path)
     with pytest.raises(ValueError):
         collect(root, tmp_path / "export")
