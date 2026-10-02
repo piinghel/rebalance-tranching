@@ -48,6 +48,14 @@ def axes_style(ax, colors: dict[str, str], *, mobile: bool) -> None:
         spine.set_visible(False)
 
 
+def save_svg(fig, output: Path) -> None:
+    fig.savefig(output, facecolor=fig.get_facecolor())
+    output.write_text(
+        "\n".join(line.rstrip() for line in output.read_text().splitlines()) + "\n"
+    )
+    plt.close(fig)
+
+
 def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> None:
     """Friday schedules and their equal-notional portfolio."""
     colors = theme(dark)
@@ -119,8 +127,7 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
         bottom=0.13,
         top=0.86,
     )
-    fig.savefig(output, facecolor=fig.get_facecolor())
-    plt.close(fig)
+    save_svg(fig, output)
 
 
 def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> None:
@@ -239,8 +246,7 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
         wspace=0.42,
         hspace=0.45,
     )
-    fig.savefig(output, facecolor=fig.get_facecolor())
-    plt.close(fig)
+    save_svg(fig, output)
 
 
 def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
