@@ -62,29 +62,11 @@ the interaction cannot be assigned uniquely to either calendar dimension.
 
 #### Replaying the underlying books
 
-`scripts/replay_calendar.py` replays one weekday/offset using the native
-portfolio-optimization research runtime. It requires that runtime and the
-licensed inputs; they are deliberately not dependencies or data of this public
-mixture-analysis package. Each process acquires the shared heavy-compute lock,
-records its actual execution, and refuses to overwrite outputs. Run one process
-at a time, for weekdays 1–5 and offsets 0–2, using these explicit arguments:
-
-```sh
-python scripts/replay_calendar.py \
-  --base /path/to/ridge_80_c0p1/backtest/config_resolved.yaml \
-  --allocation-dir /path/to/portfolio_optimization/configs/portfolio_management \
-  --panel /path/to/normalized/panel.parquet \
-  --predictions /path/to/ridge_80_c0p1/backtest/predictions.parquet \
-  --registry /path/to/research-registry --database /path/to/registry.sqlite \
-  --weekday 5 --offset 0 --calibration 1.18 --volatility-target 0.07 \
-  --output /path/to/runs/w5_o0
-```
-
-Use a new destination and increment `--attempt` for an actual retry. The
-configuration is inherited from `allocation_b3_state_aware_mvo.yaml` and its
-parent; the calibration multiplier and forecast volatility target are explicit.
-For a separately registered specification, supply its `--experiment-id` and
-unique `--run-prefix`; the defaults identify the published Ridge-80 study.
+The fifteen calendar books were replayed once with the private research runtime
+(Ridge-80 forecasts, configuration inherited from `allocation_b3_state_aware_mvo.yaml`,
+calibration multiplier 1.18, forecast volatility target 0.07). That replay script no longer
+runs against the current runtime and was removed on 2026-11-07; it is in this repository's
+Git history up to `1748dea`. `collect_ridge.py` still rebuilds the article inputs from the saved runs.
 Each standalone calendar is
 executed at $5 million reference capital. Mixtures scale these executed books
 to thirds: they preserve daily return and proportional-cost arithmetic without
@@ -128,7 +110,6 @@ comparisons. The original figure layouts are recoverable at Git revision
 | [schedule_luck.py](rebalance_tranching/schedule_luck.py) | Joint-calendar resampling and return-spread diagnostics |
 | [ridge_evidence.py](rebalance_tranching/ridge_evidence.py) | Article metrics, trading activity and block-length comparisons |
 | [ridge_figures.py](rebalance_tranching/ridge_figures.py) | Both article figures, theme/viewport variants and interactive data |
-| [replay_calendar.py](scripts/replay_calendar.py) | Optional native replay and execution registration |
 
 ## Inputs and conventions
 
