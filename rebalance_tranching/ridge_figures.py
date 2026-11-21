@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 from pathlib import Path
+from typing import TypedDict
 
 import matplotlib
 import matplotlib.dates as mdates
@@ -19,10 +21,9 @@ from matplotlib.ticker import (
     MaxNLocator,
     NullLocator,
     ScalarFormatter,
-    StrMethodFormatter,
 )
 
-from rebalance_tranching.calendar_grid import combine_grid, tranche_comparison
+from rebalance_tranching.calendar_grid import combine_grid, grid_metrics
 
 matplotlib.use("Agg")
 plt.rcParams.update(
@@ -42,6 +43,7 @@ def theme(dark: bool) -> dict[str, str]:
         grid="#36404a" if dark else "#e2e7eb",
         combined="#58a6ff" if dark else "#185fa9",
         single="#8b949e" if dark else "#6e7781",
+        calendar_blend="#76bda5" if dark else "#176b58",
     )
 
 
@@ -146,104 +148,129 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
     save_svg(fig, output)
 
 
-def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) -> None:
-    """Show the observed dispersion/trading trade-off through weekly thirds."""
-    colors = theme(dark)
-    frames = [
-        tranche_comparison(daily.lazy().filter(expression).collect())
-        for expression in [
-            pl.col("date") < pl.date(2022, 1, 1),
-            pl.col("date") >= pl.date(2022, 1, 1),
-        ]
+class CalendarPoint(TypedDict):
+    weekday: int
+    schedules: str
+    sleeves: int
+    annual_return: float
+    position: float
+
+
+class CalendarPeriod(TypedDict):
+    title: str
+    limits: tuple[float, float]
+    points: list[CalendarPoint]
+
+
+def calendar_periods(daily: pl.DataFrame) -> list[CalendarPeriod]:
+    """One point per observed calendar, with a common horizontal scale."""
+    split = pl.date(2022, 1, 1)
+    samples = [
+        ("Sep 1998–Dec 2021", pl.col("date") < split),
+        ("Jan 2022–May 2026", pl.col("date") >= split),
     ]
+    frames = [
+        grid_metrics(daily.lazy().filter(expression).collect(), include_pairs=True)
+        for _, expression in samples
+    ]
+    returns = [frame["net_cagr"].to_list() for frame in frames]
+    bounds = [(min(values), max(values)) for values in returns]
+    span = math.ceil(4 * max(high - low + 0.45 for low, high in bounds)) / 4
+    panels = []
+    for (title, _), frame, (low, high) in zip(samples, frames, bounds, strict=True):
+        left = round(2 * (low + high - span)) / 4
+        points = []
+        for count in (1, 2, 3):
+            group = (
+                frame.lazy()
+                .filter(pl.col("sleeves") == count)
+                .select("weekday", "schedules", "net_cagr")
+                .sort("net_cagr", "weekday", "schedules")
+                .collect()
+            )
+            # A slight vertical offset keeps similar returns visible on the same row.
+            for index, (weekday, schedules, annual_return) in enumerate(
+                group.iter_rows()
+            ):
+                points.append(
+                    CalendarPoint(
+                        weekday=weekday,
+                        schedules=schedules,
+                        sleeves=count,
+                        annual_return=annual_return,
+                        position=3 - count + (0, 0.075, -0.075)[index % 3],
+                    )
+                )
+        panels.append(
+            CalendarPeriod(title=title, limits=(left, left + span), points=points)
+        )
+    return panels
+
+
+def calendars(
+    periods: list[CalendarPeriod], output: Path, *, dark: bool, mobile: bool
+) -> None:
+    """Show the observed net returns for every calendar choice."""
+    colors = theme(dark)
     fig, axs = plt.subplots(
         2 if mobile else 1,
         1 if mobile else 2,
-        figsize=(5.2, 7.6) if mobile else (10, 4.2),
+        figsize=(5.2, 6.05) if mobile else (10, 2.95),
         squeeze=False,
     )
     fig.patch.set_facecolor(colors["background"])
-    for ax, metric, title in zip(
-        axs.flat,
-        ["sd_pp", "annual_orders"],
-        ["Return dispersion (pp)", "Orders per year"],
-        strict=True,
-    ):
+    for index, (ax, period) in enumerate(zip(axs.flat, periods, strict=True)):
         axes_style(ax, colors, mobile=mobile)
-        for i, (frame, period, color, dash, marker) in enumerate(
-            zip(
-                frames,
-                ["1998–2021", "2022–May 2026"],
-                [colors["single"], colors["combined"]],
-                ["--", "-"],
-                ["D", "o"],
-                strict=True,
-            )
-        ):
-            values = frame[metric].to_numpy()
-            ax.plot(
-                [1, 2, 3],
+        for count in (1, 2, 3):
+            group = [point for point in period["points"] if point["sleeves"] == count]
+            values = [point["annual_return"] for point in group]
+            color = colors["calendar_blend" if count == 3 else "single"]
+            ax.hlines(3 - count, min(values), max(values), color=color, alpha=0.55)
+            ax.scatter(
                 values,
+                [point["position"] for point in group],
                 color=color,
-                ls=dash,
-                marker=marker,
-                markersize=5 if i == 0 else 6,
-                markerfacecolor=colors["background"] if i == 0 else color,
-                lw=1.55 if i == 0 else 2.1,
-                label=period,
+                s=26 if mobile else 23,
+                linewidth=0.55,
+                edgecolors=colors["background"],
+                zorder=3,
             )
-            if i == 0:
-                continue
-            for count, value in [(1, values[0]), (3, values[-1])]:
-                above = metric == "sd_pp" and count == 1
-                ax.annotate(
-                    f"{value:.2f}" if metric == "sd_pp" else f"{value:,.0f}",
-                    (count, value),
-                    xytext=(0, 8 if above else -10),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom" if above else "top",
-                    color=color,
-                    fontsize=12 if mobile else 11,
-                )
-        maximum = max(float(f[metric].to_numpy().max()) for f in frames)
-        ax.set_ylim(0, maximum * 1.18)
-        ax.set_xlim(0.65, 3.35)
-        ax.set_xticks([1, 2, 3])
-        ax.yaxis.set_major_locator(MaxNLocator(4, steps=[1, 2, 5, 10]))
-        if metric == "annual_orders":
-            ax.yaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
-        ax.grid(axis="y", color=colors["grid"], lw=0.6)
-        ax.set_xticklabels(["1 tranche", "2 tranches", "3 tranches"])
+        left, right = period["limits"]
+        ax.set_xlim(left, right)
+        ax.set_xticks(range(math.ceil(left), math.floor(right) + 1))
+        ax.set_ylim(-0.48, 2.48)
+        ax.set_yticks([2, 1, 0], ["One book", "Two books", "Three books"])
+        ax.tick_params(labelleft=mobile or index == 0)
+        ax.grid(axis="x", color=colors["grid"], lw=0.65)
         ax.set_title(
-            title,
+            period["title"],
             loc="left",
             color=colors["ink"],
-            fontsize=14 if mobile else 13,
-            pad=15,
+            fontsize=14 if mobile else 12,
+            fontweight="semibold",
+            pad=11,
         )
-    handles, labels = axs.flat[0].get_legend_handles_labels()
-    fig.legend(
-        handles,
-        labels,
-        loc="upper center",
-        ncol=2,
-        frameon=False,
-        labelcolor=colors["ink"],
-        fontsize=12 if mobile else 11,
+    fig.supxlabel(
+        "Annualized net return (%)",
+        x=0.60 if mobile else 0.54,
+        y=0.04 if mobile else 0.07,
+        color=colors["ink"],
+        fontsize=13 if mobile else 11,
     )
     fig.subplots_adjust(
-        left=0.13 if mobile else 0.07,
+        left=0.28 if mobile else 0.13,
         right=0.96,
-        top=0.88 if mobile else 0.79,
-        bottom=0.09 if mobile else 0.17,
-        wspace=0.33,
-        hspace=0.65,
+        top=0.89 if mobile else 0.81,
+        bottom=0.15 if mobile else 0.28,
+        wspace=0.19,
+        hspace=0.57,
     )
     save_svg(fig, output)
 
 
-def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
+def interactive(
+    daily: pl.DataFrame, periods: list[CalendarPeriod], blog: Path, output: Path
+) -> None:
     """Reuse the site's allowlisted exporter and chart interaction design."""
     spec = importlib.util.spec_from_file_location(
         "blog_charts", blog / "scripts/blog_charts.py"
@@ -288,6 +315,7 @@ def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
                 referenceLevel=100,
                 showLegend=False,
                 showWindow=False,
+                controlsBelow=True,
                 unit="Indexed growth (log scale)",
                 episodes=[
                     ["Development", str(part["date"][0]), "2021-12-31"],
@@ -297,23 +325,13 @@ def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
             )
         },
     )
-    panels = []
-    for title, expression in [
-        ("1998–2021", pl.col("date") < pl.date(2022, 1, 1)),
-        ("2022–May 2026", pl.col("date") >= pl.date(2022, 1, 1)),
-    ]:
-        frame = tranche_comparison(daily.lazy().filter(expression).collect())
-        panels.append(
-            dict(
-                title=title,
-                points=frame.to_dicts(),
-            )
-        )
     (output / "ridge-calendars.json").write_text(
         json.dumps(
             dict(
                 version=1,
-                charts={"calendars": dict(kind="tranche-tradeoff", periods=panels)},
+                charts={
+                    "calendars": dict(kind="calendar-distribution", periods=periods)
+                },
             ),
             allow_nan=False,
         )
@@ -329,6 +347,7 @@ def main() -> None:
     args = parser.parse_args()
     daily = pl.scan_parquet(args.input).collect()
     combine_grid(daily)  # Validate complete, finite, matched calendar inputs.
+    periods = calendar_periods(daily)
     args.output.mkdir(parents=True, exist_ok=True)
     for dark in [False, True]:
         for mobile in [False, True]:
@@ -337,12 +356,12 @@ def main() -> None:
                 daily, args.output / ("ridge-paths" + suffix), dark=dark, mobile=mobile
             )
             calendars(
-                daily,
+                periods,
                 args.output / ("ridge-calendars" + suffix),
                 dark=dark,
                 mobile=mobile,
             )
-    interactive(daily, args.blog, args.output)
+    interactive(daily, periods, args.blog, args.output)
 
 
 if __name__ == "__main__":

@@ -32,12 +32,19 @@ def test_chart_view_matches_daily_evidence():
 
 @pytest.mark.parametrize("mobile", [False, True])
 @pytest.mark.parametrize("render", [ridge_figures.performance, ridge_figures.calendars])
-def test_current_figures_export_vector_matching_theme_layouts(tmp_path, mobile, render):
-    daily = pl.read_parquet(DATA / "ridge80_calendar_daily.parquet")
+def test_current_figures_export_vector_matching_theme_layouts(
+    tmp_path, mobile, render, data_dir: Path = DATA
+):
+    daily = pl.read_parquet(data_dir / "ridge80_calendar_daily.parquet")
     bounds = []
     for dark in (False, True):
         output = tmp_path / f"figure-{dark}.svg"
-        render(daily, output, dark=dark, mobile=mobile)
+        if render is ridge_figures.performance:
+            render(daily, output, dark=dark, mobile=mobile)
+        else:
+            render(
+                ridge_figures.calendar_periods(daily), output, dark=dark, mobile=mobile
+            )
         svg = ElementTree.parse(output).getroot()
         bounds.append(svg.attrib["viewBox"])
         text = " ".join(svg.itertext())
@@ -45,8 +52,33 @@ def test_current_figures_export_vector_matching_theme_layouts(tmp_path, mobile, 
             assert "Week 1" in text and "Week 2" in text and "Week 3" in text
             assert "Three" in text and "tranches" in text
         else:
-            assert "Return dispersion (pp)" in text and "Orders per year" in text
-            assert "1 tranche" in text and "3 tranches" in text
-            assert "1.11" in text and "0.31" in text and "7,288" in text
+            assert "Annualized net return (%)" in text
+            assert "One book" in text and "Three books" in text
+            assert "Sep 1998–Dec 2021" in text and "Jan 2022–May 2026" in text
         assert not list(svg.iter("{http://www.w3.org/2000/svg}image"))
     assert bounds[0] == bounds[1]
+
+
+def test_calendar_figure_preserves_every_choice_and_a_common_scale(
+    data_dir: Path = DATA,
+):
+    daily = pl.scan_parquet(data_dir / "ridge80_calendar_daily.parquet").collect()
+    development, later = ridge_figures.calendar_periods(daily)
+    assert later["limits"][1] - later["limits"][0] == pytest.approx(
+        development["limits"][1] - development["limits"][0]
+    )
+    for period in (development, later):
+        left, right = period["limits"]
+        points = period["points"]
+        assert len({(point["weekday"], point["schedules"]) for point in points}) == 35
+        assert [
+            sum(point["sleeves"] == count for point in points) for count in (1, 2, 3)
+        ] == [15, 15, 5]
+        assert all(left < point["annual_return"] < right for point in points)
+    for count, expected in [(1, (5.65, 9.42)), (3, (7.13, 8.08))]:
+        values = [
+            point["annual_return"]
+            for point in later["points"]
+            if point["sleeves"] == count
+        ]
+        assert (min(values), max(values)) == pytest.approx(expected, abs=0.005)
