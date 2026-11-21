@@ -309,7 +309,6 @@ def interactive(
                 kind="performance",
                 log=True,
                 series=["1", "2", "3", "1+2+3"],
-                initialRange=["2021-12-31", "2026-05-27"],
                 directLabels=True,
                 emphasis="1+2+3",
                 referenceLevel=100,
