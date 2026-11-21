@@ -46,7 +46,7 @@ def test_current_figures_export_vector_matching_theme_layouts(tmp_path, mobile, 
             assert "Three" in text and "tranches" in text
         else:
             assert "Return dispersion (pp)" in text and "Orders per year" in text
-            assert "Number of tranches" in text
-            assert "0.50" in text and "0.31" in text and "7,288" in text
+            assert "1 tranche" in text and "3 tranches" in text
+            assert "1.11" in text and "0.31" in text and "7,288" in text
         assert not list(svg.iter("{http://www.w3.org/2000/svg}image"))
     assert bounds[0] == bounds[1]

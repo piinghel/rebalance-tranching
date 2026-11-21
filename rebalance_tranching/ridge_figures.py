@@ -14,7 +14,13 @@ import numpy as np
 import polars as pl
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.ticker import FixedLocator, MaxNLocator, NullLocator, ScalarFormatter
+from matplotlib.ticker import (
+    FixedLocator,
+    MaxNLocator,
+    NullLocator,
+    ScalarFormatter,
+    StrMethodFormatter,
+)
 
 from rebalance_tranching.calendar_grid import combine_grid, tranche_comparison
 
@@ -34,8 +40,7 @@ def theme(dark: bool) -> dict[str, str]:
         background="#0d1117" if dark else "#ffffff",
         ink="#dce3eb" if dark else "#27343d",
         grid="#36404a" if dark else "#e2e7eb",
-        range="#727d88" if dark else "#a3acb5",
-        combined="#3987e5" if dark else "#2a78d6",
+        combined="#58a6ff" if dark else "#185fa9",
         single="#8b949e" if dark else "#6e7781",
     )
 
@@ -88,7 +93,7 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
             dates,
             growth,
             color=colors[color],
-            lw=2.1 if key == "1+2+3" else 1.3,
+            lw=2.5 if key == "1+2+3" else 1.15,
             ls=dash,
         )
         lines.append((float(growth[-1]), label, colors[color]))
@@ -119,14 +124,14 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
     ax.yaxis.set_major_formatter(ScalarFormatter())
     ax.yaxis.set_minor_locator(NullLocator())
     ax.grid(axis="y", color=colors["grid"], lw=0.6)
-    ax.axhline(100, color=colors["grid"], lw=0.8)
+    ax.axhline(100, color=colors["single"], lw=0.8, alpha=0.55, zorder=0)
     ax.set_xlim(dates[0], dates[-1])
     ax.xaxis.set_major_locator(mdates.YearLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     ax.text(
         0,
         1.05,
-        "Net growth · log scale",
+        "Indexed growth (log scale)",
         transform=ax.transAxes,
         color=colors["ink"],
         fontsize=13 if mobile else 12,
@@ -134,7 +139,7 @@ def performance(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) 
     )
     fig.subplots_adjust(
         left=0.13 if mobile else 0.08,
-        right=0.79 if mobile else 0.87,
+        right=0.78 if mobile else 0.83,
         bottom=0.13,
         top=0.86,
     )
@@ -165,28 +170,32 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
         strict=True,
     ):
         axes_style(ax, colors, mobile=mobile)
-        for i, (frame, period, color, dash) in enumerate(
+        for i, (frame, period, color, dash, marker) in enumerate(
             zip(
                 frames,
                 ["1998–2021", "2022–May 2026"],
                 [colors["single"], colors["combined"]],
                 ["--", "-"],
+                ["D", "o"],
                 strict=True,
             )
         ):
             values = frame[metric].to_numpy()
-            other = frames[1 - i][metric].to_numpy()
             ax.plot(
                 [1, 2, 3],
                 values,
                 color=color,
                 ls=dash,
-                marker="o",
-                lw=1.8,
+                marker=marker,
+                markersize=5 if i == 0 else 6,
+                markerfacecolor=colors["background"] if i == 0 else color,
+                lw=1.55 if i == 0 else 2.1,
                 label=period,
             )
-            for count, value, comparison in zip([1, 2, 3], values, other, strict=True):
-                above = value >= comparison
+            if i == 0:
+                continue
+            for count, value in [(1, values[0]), (3, values[-1])]:
+                above = metric == "sd_pp" and count == 1
                 ax.annotate(
                     f"{value:.2f}" if metric == "sd_pp" else f"{value:,.0f}",
                     (count, value),
@@ -199,13 +208,13 @@ def calendars(daily: pl.DataFrame, output: Path, *, dark: bool, mobile: bool) ->
                 )
         maximum = max(float(f[metric].to_numpy().max()) for f in frames)
         ax.set_ylim(0, maximum * 1.18)
-        ax.set_xlim(0.75, 3.25)
+        ax.set_xlim(0.65, 3.35)
         ax.set_xticks([1, 2, 3])
         ax.yaxis.set_major_locator(MaxNLocator(4, steps=[1, 2, 5, 10]))
+        if metric == "annual_orders":
+            ax.yaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
         ax.grid(axis="y", color=colors["grid"], lw=0.6)
-        ax.set_xlabel(
-            "Number of tranches", color=colors["ink"], fontsize=12, labelpad=10
-        )
+        ax.set_xticklabels(["1 tranche", "2 tranches", "3 tranches"])
         ax.set_title(
             title,
             loc="left",
@@ -251,7 +260,7 @@ def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
         ("1", "Week 1", "short", "solid"),
         ("2", "Week 2", "short", "dash"),
         ("3", "Week 3", "short", "dot"),
-        ("1+2+3", "Three tranches", "long", "solid"),
+        ("1+2+3", "Three tranches", "blend", "solid"),
     ]:
         part = friday.lazy().filter(pl.col("schedules") == key).collect()
         series.append(
@@ -275,8 +284,11 @@ def interactive(daily: pl.DataFrame, blog: Path, output: Path) -> None:
                 series=["1", "2", "3", "1+2+3"],
                 initialRange=["2021-12-31", "2026-05-27"],
                 directLabels=True,
+                emphasis="1+2+3",
+                referenceLevel=100,
                 showLegend=False,
-                unit="Net growth · log scale",
+                showWindow=False,
+                unit="Indexed growth (log scale)",
                 episodes=[
                     ["Development", str(part["date"][0]), "2021-12-31"],
                     ["Later", "2021-12-31", "2026-05-27"],
